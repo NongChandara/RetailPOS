@@ -1,6 +1,6 @@
 {
-  "name": "RetailPOS",
-  "description": "All-in-one POS, stock management, staff user control, and real-time inventory tracking for small retail businesses.",
+  "name": "TR Store & Cafe",
+  "description": "Multi-category store for Cosmetics, Coffee, and Services with online ordering, appointment booking, and loyalty points tracking.",
   "requestFramePermissions": ["camera"],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

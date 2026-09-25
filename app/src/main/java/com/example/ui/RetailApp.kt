@@ -1,5 +1,6 @@
 package com.example.ui
 
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
@@ -19,7 +20,9 @@ import androidx.compose.material.icons.filled.NotificationsActive
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Inventory2
 import androidx.compose.material.icons.filled.People
+import androidx.compose.material.icons.filled.PersonPin
 import androidx.compose.material.icons.filled.PointOfSale
+import androidx.compose.material.icons.filled.QrCode
 import androidx.compose.material.icons.filled.ReceiptLong
 import androidx.compose.material.icons.filled.Shield
 import androidx.compose.material.icons.filled.Timeline
@@ -50,10 +53,14 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.R
+import com.example.ui.clients.ClientsScreen
 import com.example.ui.components.CurrencySettingsDialog
 import com.example.ui.components.LowStockAlertSettingsDialog
 import com.example.ui.components.SecureActivityLogView
@@ -82,7 +89,7 @@ enum class RetailTab(
     STOCK("Stock", Icons.Filled.Inventory2, "tab_stock"),
     TRACKING("Tracking", Icons.Filled.Timeline, "tab_tracking"),
     SALES("Sales", Icons.Filled.ReceiptLong, "tab_sales"),
-    AUDIT("Audit", Icons.Filled.Shield, "tab_audit"),
+    CLIENTS("Clients", Icons.Filled.PersonPin, "tab_clients"),
     USERS("Staff", Icons.Filled.People, "tab_users")
 }
 
@@ -120,32 +127,42 @@ fun RetailApp(
                         verticalAlignment = Alignment.CenterVertically,
                         modifier = Modifier.padding(vertical = 4.dp)
                     ) {
-                        Box(
+                        Surface(
                             modifier = Modifier
-                                .size(32.dp)
-                                .clip(RoundedCornerShape(8.dp))
-                                .background(RetailTealPrimary),
-                            contentAlignment = Alignment.Center
+                                .size(36.dp)
+                                .clip(CircleShape),
+                            color = Color.White,
+                            shadowElevation = 1.dp
                         ) {
-                            Icon(
-                                Icons.Filled.PointOfSale,
-                                contentDescription = null,
-                                tint = Color.White,
-                                modifier = Modifier.size(20.dp)
+                            Image(
+                                painter = painterResource(id = R.drawable.img_tr_coffee_logo),
+                                contentDescription = "TR Coffee Logo",
+                                modifier = Modifier.fillMaxSize(),
+                                contentScale = ContentScale.Fit
                             )
                         }
                         Spacer(modifier = Modifier.width(10.dp))
                         Column {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text(
+                                    text = "TR Coffee",
+                                    fontWeight = FontWeight.ExtraBold,
+                                    fontSize = 16.sp,
+                                    color = RetailSlate900
+                                )
+                                Text(
+                                    text = "®",
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 10.sp,
+                                    color = Color(0xFFD32F2F),
+                                    modifier = Modifier.padding(start = 2.dp)
+                                )
+                            }
                             Text(
-                                text = "RetailPOS",
-                                fontWeight = FontWeight.ExtraBold,
-                                fontSize = 17.sp,
-                                color = RetailSlate900
-                            )
-                            Text(
-                                text = "Small Business System",
-                                fontSize = 10.sp,
-                                color = RetailSlate700
+                                text = "កាហ្វេ ទីរ៉ូ",
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color(0xFF0F4D2A)
                             )
                         }
                     }
@@ -305,11 +322,7 @@ fun RetailApp(
                 RetailTab.STOCK -> StockScreen(viewModel = viewModel)
                 RetailTab.TRACKING -> InventoryTrackingScreen(viewModel = viewModel)
                 RetailTab.SALES -> SalesHistoryScreen(viewModel = viewModel)
-                RetailTab.AUDIT -> {
-                    Box(modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp)) {
-                        SecureActivityLogView(viewModel = viewModel)
-                    }
-                }
+                RetailTab.CLIENTS -> ClientsScreen(viewModel = viewModel)
                 RetailTab.USERS -> UsersScreen(viewModel = viewModel)
             }
         }

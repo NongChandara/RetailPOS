@@ -32,6 +32,7 @@ import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.CreditCard
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Money
 import androidx.compose.material.icons.filled.PictureAsPdf
 import androidx.compose.material.icons.filled.Print
@@ -41,6 +42,8 @@ import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.ShoppingCart
+import androidx.compose.material.icons.filled.Storefront
+import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -66,6 +69,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -76,20 +80,27 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import com.example.ui.components.ProductThumbnail
 import com.example.ui.receipt.DigitalReceiptScreen
 import java.io.File
 import java.util.Locale
 import com.example.data.model.ProductEntity
 import com.example.data.model.SaleEntity
 import com.example.data.model.SaleItemEntity
+import com.example.data.model.UserEntity
+import com.example.data.model.BranchEntity
 import com.example.ui.CartItem
 import com.example.ui.MainViewModel
+import kotlinx.coroutines.launch
+import com.example.ui.components.BranchReceiptAndTaxDialog
+import com.example.ui.components.EditTaxPercentDialog
 import com.example.ui.components.StockBadge
 import com.example.ui.components.formatCurrency
 import com.example.ui.components.formatDateTime
@@ -121,10 +132,15 @@ fun PosScreen(
     val completedSale by viewModel.completedSale.collectAsState()
     val khrRate by viewModel.khrExchangeRate.collectAsState()
     val currencyMode by viewModel.currencyMode.collectAsState()
+    val currentUser by viewModel.currentUser.collectAsState()
+    val activeBranch by viewModel.activeBranch.collectAsState()
+    val allBranches by viewModel.allBranches.collectAsState()
 
     var showCartSheet by remember { mutableStateOf(false) }
     var showCheckoutDialog by remember { mutableStateOf(false) }
     var showBarcodeScanner by remember { mutableStateOf(false) }
+    var showBranchReceiptDialog by remember { mutableStateOf(false) }
+    var showEditTaxDialog by remember { mutableStateOf(false) }
 
     val totalItems = cart.sumOf { it.quantity }
     val subtotal = cart.sumOf { it.subtotal }
@@ -133,7 +149,10 @@ fun PosScreen(
     val taxAmount = afterDiscount * taxRate
     val grandTotal = afterDiscount + taxAmount
 
-    val categories = listOf("All", "Beverages", "Bakery", "Snacks", "Electronics", "Home & Goods", "Personal Care", "Apparel")
+    val categoryNames by viewModel.categoryNames.collectAsState()
+    val categories = remember(categoryNames) {
+        listOf("All") + categoryNames.filter { it.isNotBlank() }
+    }
 
     Box(modifier = modifier.fillMaxSize()) {
         Column(
@@ -190,6 +209,74 @@ fun PosScreen(
                     )
                     Spacer(modifier = Modifier.width(4.dp))
                     Text("Scan", fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                }
+            }
+
+            // Active Branch & Tax Configuration Banner
+            Surface(
+                color = RetailSlate100,
+                shape = RoundedCornerShape(10.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 2.dp)
+                    .clickable { showBranchReceiptDialog = true }
+                    .testTag("pos_branch_tax_bar")
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 12.dp, vertical = 6.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            Icons.Filled.Storefront,
+                            contentDescription = null,
+                            tint = RetailTealPrimary,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = activeBranch?.name ?: "Main Branch",
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = RetailSlate900
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        val currentTaxPct = String.format(Locale.US, "%.1f", taxRate * 100).removeSuffix(".0")
+                        Surface(
+                            color = Color(0xFFDCFCE7),
+                            shape = RoundedCornerShape(4.dp)
+                        ) {
+                            Text(
+                                text = "Tax: $currentTaxPct%",
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color(0xFF166534),
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 1.dp)
+                            )
+                        }
+                    }
+
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.clickable { showBranchReceiptDialog = true }
+                    ) {
+                        Text(
+                            text = "Receipt & Tax",
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = RetailTealPrimary
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Icon(
+                            Icons.Filled.Tune,
+                            contentDescription = null,
+                            tint = RetailTealPrimary,
+                            modifier = Modifier.size(14.dp)
+                        )
+                    }
                 }
             }
 
@@ -375,8 +462,10 @@ fun PosScreen(
                 subtotal = subtotal,
                 discountPercent = discountPercent,
                 discountAmount = discountAmount,
+                taxRate = taxRate,
                 taxAmount = taxAmount,
                 grandTotal = grandTotal,
+                onEditTaxClicked = { showEditTaxDialog = true },
                 onUpdateQty = { id, delta -> viewModel.updateCartQuantity(id, delta) },
                 onRemoveItem = { id -> viewModel.removeFromCart(id) },
                 onSetDiscount = { pct -> viewModel.setDiscountPercent(pct) },
@@ -401,6 +490,8 @@ fun PosScreen(
         CheckoutDialog(
             grandTotal = grandTotal,
             khrRate = khrRate,
+            currentUser = currentUser,
+            onVerifyAdminPin = { pin -> viewModel.verifyAdminPin(pin) },
             onDismiss = { showCheckoutDialog = false },
             onConfirmPayment = { method, tendered ->
                 viewModel.processCheckout(method, tendered)
@@ -411,11 +502,42 @@ fun PosScreen(
 
     // Digital Receipt Dialog
     completedSale?.let { (sale, items) ->
+        val saleBranch = allBranches.firstOrNull { it.name.equals(sale.branchName, ignoreCase = true) } ?: activeBranch
         ReceiptDialog(
             sale = sale,
             items = items,
             khrRate = khrRate,
+            branch = saleBranch,
+            onEditReceiptConfig = { showBranchReceiptDialog = true },
             onDismiss = { viewModel.dismissReceipt() }
+        )
+    }
+
+    // Branch Receipt & Tax Settings Dialog
+    if (showBranchReceiptDialog) {
+        BranchReceiptAndTaxDialog(
+            branches = allBranches,
+            activeBranch = activeBranch,
+            initialBranch = activeBranch,
+            onDismiss = { showBranchReceiptDialog = false },
+            onSaveBranchReceipt = { branch, header, subtitle, vatTin, addr, phone, footer, taxPct, gap, setAsActive ->
+                viewModel.updateBranchReceiptConfig(branch, header, subtitle, vatTin, addr, phone, footer, taxPct, gap, setAsActive)
+            },
+            onSetActiveBranch = { branch ->
+                viewModel.setActiveBranch(branch)
+            }
+        )
+    }
+
+    // Quick Tax Percent Dialog
+    if (showEditTaxDialog) {
+        EditTaxPercentDialog(
+            currentTaxPercent = taxRate * 100.0,
+            cartSubtotal = afterDiscount,
+            onDismiss = { showEditTaxDialog = false },
+            onApplyTaxPercent = { newTaxPct, updateBranchDefault ->
+                viewModel.setTaxPercent(newTaxPct, updateBranchDefault)
+            }
         )
     }
 }
@@ -441,38 +563,51 @@ fun PosProductRow(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = product.name,
-                    fontWeight = FontWeight.SemiBold,
-                    fontSize = 15.sp,
-                    color = RetailSlate900,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.weight(1f)
+            ) {
+                ProductThumbnail(
+                    imageUrl = product.imageUrl,
+                    productName = product.name,
+                    category = product.category,
+                    modifier = Modifier.size(54.dp),
+                    shape = RoundedCornerShape(10.dp)
                 )
-                Spacer(modifier = Modifier.height(3.dp))
-                Row(verticalAlignment = Alignment.CenterVertically) {
+                Spacer(modifier = Modifier.width(12.dp))
+                Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        text = "SKU: ${product.sku}",
-                        fontSize = 12.sp,
-                        color = RetailSlate500
+                        text = product.name,
+                        fontWeight = FontWeight.SemiBold,
+                        fontSize = 15.sp,
+                        color = RetailSlate900,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
                     )
-                    if (product.barcode.isNotBlank()) {
+                    Spacer(modifier = Modifier.height(3.dp))
+                    Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(
-                            text = " • #${product.barcode}",
+                            text = "SKU: ${product.sku}",
                             fontSize = 12.sp,
-                            color = RetailTealPrimary,
-                            fontFamily = FontFamily.Monospace
+                            color = RetailSlate500
+                        )
+                        if (product.barcode.isNotBlank()) {
+                            Text(
+                                text = " • #${product.barcode}",
+                                fontSize = 12.sp,
+                                color = RetailTealPrimary,
+                                fontFamily = FontFamily.Monospace
+                            )
+                        }
+                        Text(
+                            text = " • ${product.category}",
+                            fontSize = 12.sp,
+                            color = RetailSlate500
                         )
                     }
-                    Text(
-                        text = " • ${product.category}",
-                        fontSize = 12.sp,
-                        color = RetailSlate500
-                    )
+                    Spacer(modifier = Modifier.height(6.dp))
+                    StockBadge(quantity = product.stockQuantity, threshold = product.minStockThreshold)
                 }
-                Spacer(modifier = Modifier.height(6.dp))
-                StockBadge(quantity = product.stockQuantity, threshold = product.minStockThreshold)
             }
 
             Column(
@@ -516,8 +651,10 @@ fun CartSheetContent(
     subtotal: Double,
     discountPercent: Double,
     discountAmount: Double,
+    taxRate: Double = 0.08,
     taxAmount: Double,
     grandTotal: Double,
+    onEditTaxClicked: (() -> Unit)? = null,
     onUpdateQty: (Long, Int) -> Unit,
     onRemoveItem: (Long) -> Unit,
     onSetDiscount: (Double) -> Unit,
@@ -579,11 +716,19 @@ fun CartSheetContent(
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .background(RetailSlate100, RoundedCornerShape(8.dp))
+                        .background(RetailSlate100, RoundedCornerShape(10.dp))
                         .padding(10.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
+                    ProductThumbnail(
+                        imageUrl = item.product.imageUrl,
+                        productName = item.product.name,
+                        category = item.product.category,
+                        modifier = Modifier.size(42.dp),
+                        shape = RoundedCornerShape(8.dp)
+                    )
+                    Spacer(modifier = Modifier.width(10.dp))
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
                             text = item.product.name,
@@ -707,9 +852,31 @@ fun CartSheetContent(
             }
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Text("Sales Tax (8%)", color = RetailSlate500, fontSize = 13.sp)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    val taxPctStr = String.format(Locale.US, "%.1f", taxRate * 100.0).removeSuffix(".0")
+                    Text("Sales Tax ($taxPctStr%)", color = RetailSlate500, fontSize = 13.sp)
+                    if (onEditTaxClicked != null) {
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Surface(
+                            color = Color(0xFFDCFCE7),
+                            shape = RoundedCornerShape(4.dp),
+                            modifier = Modifier
+                                .clickable { onEditTaxClicked() }
+                                .testTag("cart_edit_tax_btn")
+                        ) {
+                            Text(
+                                text = "Edit",
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color(0xFF166534),
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                            )
+                        }
+                    }
+                }
                 Text(formatCurrency(taxAmount), fontSize = 13.sp)
             }
             Row(
@@ -739,9 +906,21 @@ fun CartSheetContent(
 fun CheckoutDialog(
     grandTotal: Double,
     khrRate: Double = CurrencyUtils.activeKhrExchangeRate,
+    currentUser: UserEntity? = null,
+    onVerifyAdminPin: (suspend (String) -> UserEntity?)? = null,
     onDismiss: () -> Unit,
     onConfirmPayment: (String, Double) -> Unit
 ) {
+    val isAdmin = currentUser?.role?.equals("ADMIN", ignoreCase = true) == true
+    var adminUnlockedForSession by remember { mutableStateOf(false) }
+    var adminAuthorizingUser by remember { mutableStateOf<UserEntity?>(null) }
+    val isBakongAuthorized = isAdmin || adminUnlockedForSession
+
+    var adminPinInput by remember { mutableStateOf("") }
+    var adminPinError by remember { mutableStateOf<String?>(null) }
+    var isVerifyingPin by remember { mutableStateOf(false) }
+    val coroutineScope = rememberCoroutineScope()
+
     var selectedMethod by remember { mutableStateOf("CASH") }
     var tenderCurrency by remember { mutableStateOf("USD") } // "USD" or "KHR"
 
@@ -835,7 +1014,11 @@ fun CheckoutDialog(
                 ) {
                     listOf(
                         Triple("CASH", "Cash (USD/KHR)", Icons.Filled.Money),
-                        Triple("KHQR", "KHQR Bakong", Icons.Filled.QrCode),
+                        Triple(
+                            "KHQR",
+                            if (isBakongAuthorized) "KHQR Bakong" else "KHQR (Admin)",
+                            if (isBakongAuthorized) Icons.Filled.QrCode else Icons.Filled.Lock
+                        ),
                         Triple("CARD", "Credit Card", Icons.Filled.CreditCard)
                     ).forEach { (id, label, icon) ->
                         val isSelected = selectedMethod == id
@@ -844,6 +1027,7 @@ fun CheckoutDialog(
                             color = if (isSelected) RetailTealPrimary else RetailSlate100,
                             modifier = Modifier
                                 .weight(1f)
+                                .testTag("tender_method_${id.lowercase()}")
                                 .clickable {
                                     selectedMethod = id
                                     if (id == "KHQR" || id == "CARD") {
@@ -874,53 +1058,166 @@ fun CheckoutDialog(
                     }
                 }
 
-                // KHQR / Bakong presentation
+                // KHQR / Bakong presentation (Exposed only for Admin users or admin-authorized sessions)
                 if (selectedMethod == "KHQR") {
-                    Surface(
-                        color = Color(0xFFF0FDF4),
-                        shape = RoundedCornerShape(12.dp),
-                        border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF86EFAC)),
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
+                    if (isBakongAuthorized) {
                         Column(
-                            modifier = Modifier.padding(14.dp),
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                            verticalArrangement = Arrangement.spacedBy(10.dp),
+                            modifier = Modifier.fillMaxWidth().testTag("bakong_admin_controls_container")
                         ) {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            // Admin Role Security Verification Badge
+                            Surface(
+                                color = Color(0xFFF0FDF4),
+                                shape = RoundedCornerShape(8.dp),
+                                border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFBBF7D0)),
+                                modifier = Modifier.fillMaxWidth().testTag("admin_authorized_badge")
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Icon(
+                                        Icons.Filled.Lock,
+                                        contentDescription = null,
+                                        tint = Color(0xFF15803D),
+                                        modifier = Modifier.size(14.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text(
+                                        text = if (isAdmin) {
+                                            "Admin Privileges Verified: ${currentUser?.name ?: "Admin"} (ADMIN)"
+                                        } else {
+                                            "Admin Authorization Granted by ${adminAuthorizingUser?.name ?: "Store Administrator"}"
+                                        },
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = Color(0xFF15803D)
+                                    )
+                                }
+                            }
+
+                            // Bakong QR Payment Controls Component
+                            com.example.ui.components.BakongKhqrCard(
+                                usdAmount = grandTotal,
+                                khrRate = khrRate,
+                                merchantName = "TR STORE & CAFE",
+                                bakongAccountId = "trstore@aclb",
+                                billNumber = "BILL-${System.currentTimeMillis() % 100000}",
+                                onConfirmPaid = {
+                                    onConfirmPayment("KHQR", grandTotal)
+                                }
+                            )
+                        }
+                    } else {
+                        // Hide Bakong QR payment controls and require Admin authentication
+                        Surface(
+                            color = Color(0xFFFFFBEB),
+                            shape = RoundedCornerShape(12.dp),
+                            border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFFDE68A)),
+                            modifier = Modifier.fillMaxWidth().testTag("bakong_admin_restricted_panel")
+                        ) {
+                            Column(
+                                modifier = Modifier.padding(16.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.spacedBy(10.dp)
                             ) {
                                 Box(
                                     modifier = Modifier
-                                        .background(Color(0xFFDC2626), RoundedCornerShape(4.dp))
-                                        .padding(horizontal = 6.dp, vertical = 2.dp)
+                                        .size(44.dp)
+                                        .clip(CircleShape)
+                                        .background(Color(0xFFFEF3C7)),
+                                    contentAlignment = Alignment.Center
                                 ) {
-                                    Text("KHQR", color = Color.White, fontWeight = FontWeight.Black, fontSize = 11.sp)
+                                    Icon(
+                                        Icons.Filled.Lock,
+                                        contentDescription = "Admin Restricted",
+                                        tint = Color(0xFFD97706),
+                                        modifier = Modifier.size(24.dp)
+                                    )
                                 }
-                                Text("Bakong Universal QR", fontWeight = FontWeight.Bold, fontSize = 13.sp, color = Color(0xFF166534))
-                            }
 
-                            // QR Preview Box
-                            Box(
-                                modifier = Modifier
-                                    .size(130.dp)
-                                    .background(Color.White, RoundedCornerShape(8.dp))
-                                    .border(1.dp, RetailSlate300, RoundedCornerShape(8.dp)),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                    Icon(Icons.Filled.QrCode, contentDescription = "KHQR", tint = RetailSlate900, modifier = Modifier.size(80.dp))
-                                    Text(CurrencyUtils.formatKhrRaw(grandTotalKhr), fontWeight = FontWeight.ExtraBold, fontSize = 11.sp, color = Color(0xFFDC2626))
+                                Text(
+                                    text = "Admin Role Required for Bakong QR",
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 15.sp,
+                                    color = RetailSlate900,
+                                    textAlign = TextAlign.Center
+                                )
+
+                                Text(
+                                    text = "Bakong QR payment controls and digital settlement are restricted to Admin users. Currently logged in: ${currentUser?.name ?: "Staff"} (${currentUser?.role ?: "CASHIER"}).",
+                                    fontSize = 12.sp,
+                                    color = RetailSlate700,
+                                    textAlign = TextAlign.Center
+                                )
+
+                                Text(
+                                    text = "Enter Store Admin PIN to expose Bakong QR controls:",
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = RetailSlate900
+                                )
+
+                                OutlinedTextField(
+                                    value = adminPinInput,
+                                    onValueChange = {
+                                        if (it.length <= 6 && it.all { c -> c.isDigit() }) {
+                                            adminPinInput = it
+                                            adminPinError = null
+                                        }
+                                    },
+                                    placeholder = { Text("••••") },
+                                    visualTransformation = PasswordVisualTransformation(),
+                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
+                                    singleLine = true,
+                                    shape = RoundedCornerShape(8.dp),
+                                    modifier = Modifier
+                                        .fillMaxWidth(0.65f)
+                                        .testTag("admin_pin_auth_input")
+                                )
+
+                                if (adminPinError != null) {
+                                    Text(
+                                        text = adminPinError ?: "",
+                                        color = Color.Red,
+                                        fontSize = 12.sp,
+                                        fontWeight = FontWeight.SemiBold,
+                                        textAlign = TextAlign.Center
+                                    )
+                                }
+
+                                Button(
+                                    onClick = {
+                                        coroutineScope.launch {
+                                            isVerifyingPin = true
+                                            val adminUser = onVerifyAdminPin?.invoke(adminPinInput)
+                                            isVerifyingPin = false
+                                            if (adminUser != null) {
+                                                adminAuthorizingUser = adminUser
+                                                adminUnlockedForSession = true
+                                                adminPinInput = ""
+                                                adminPinError = null
+                                            } else {
+                                                adminPinError = "Invalid Admin PIN. Only Admin users can authorize Bakong QR."
+                                            }
+                                        }
+                                    },
+                                    enabled = adminPinInput.length >= 4 && !isVerifyingPin,
+                                    colors = ButtonDefaults.buttonColors(containerColor = RetailTealPrimary),
+                                    shape = RoundedCornerShape(8.dp),
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .testTag("unlock_bakong_btn")
+                                ) {
+                                    Icon(Icons.Filled.Lock, contentDescription = null, modifier = Modifier.size(16.dp))
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text(
+                                        if (isVerifyingPin) "Verifying..." else "Authorize & Expose Bakong QR",
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 13.sp
+                                    )
                                 }
                             }
-
-                            Text(
-                                "Customer scans with ABA, ACLEDA, Wing, Sathapana, or any Bakong app",
-                                fontSize = 11.sp,
-                                color = RetailSlate500,
-                                textAlign = TextAlign.Center
-                            )
                         }
                     }
                 }
@@ -1048,7 +1345,12 @@ fun CheckoutDialog(
                     }
                 }
 
-                val canConfirm = selectedMethod != "CASH" || (tenderCurrency == "KHR" && (amountTenderedText.filter { it.isDigit() }.toLongOrNull() ?: 0L) >= grandTotalKhr) || (tenderCurrency == "USD" && tenderedUsd >= grandTotal - 0.001)
+                val canConfirm = when (selectedMethod) {
+                    "KHQR" -> isBakongAuthorized
+                    "CARD" -> true
+                    else -> (tenderCurrency == "KHR" && (amountTenderedText.filter { it.isDigit() }.toLongOrNull() ?: 0L) >= grandTotalKhr) ||
+                            (tenderCurrency == "USD" && tenderedUsd >= grandTotal - 0.001)
+                }
 
                 Button(
                     onClick = { onConfirmPayment(selectedMethod, tenderedUsd) },
@@ -1074,6 +1376,8 @@ fun ReceiptDialog(
     sale: SaleEntity,
     items: List<SaleItemEntity>,
     khrRate: Double = CurrencyUtils.activeKhrExchangeRate,
+    branch: BranchEntity? = null,
+    onEditReceiptConfig: (() -> Unit)? = null,
     onDismiss: () -> Unit
 ) {
     Dialog(
@@ -1084,6 +1388,8 @@ fun ReceiptDialog(
             sale = sale,
             items = items,
             khrRate = khrRate,
+            branch = branch,
+            onEditReceipt = onEditReceiptConfig,
             onDismiss = onDismiss
         )
     }

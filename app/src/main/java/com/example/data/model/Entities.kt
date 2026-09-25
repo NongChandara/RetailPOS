@@ -1,57 +1,7 @@
 package com.example.data.model
 
 import androidx.room.Entity
-import androidx.room.Ignore
 import androidx.room.PrimaryKey
-
-@Entity(tableName = "products")
-data class ProductEntity(
-    @PrimaryKey(autoGenerate = true)
-    val id: Long = 0,
-    val name: String,
-    val sku: String,
-    val category: String,
-    val costPrice: Double,
-    val sellingPrice: Double,
-    val stockQuantity: Int,
-    val minStockThreshold: Int = 5,
-    val unit: String = "pcs",
-    val barcode: String = "",
-    val updatedAt: Long = System.currentTimeMillis()
-) {
-    /**
-     * Standard retail price accessor representing the product's selling price.
-     */
-    val price: Double
-        get() = sellingPrice
-
-    @Ignore
-    constructor(
-        name: String,
-        price: Double,
-        stockQuantity: Int,
-        category: String,
-        id: Long = 0L,
-        sku: String = "SKU-${System.currentTimeMillis() % 100000}",
-        costPrice: Double = price * 0.6,
-        minStockThreshold: Int = 5,
-        unit: String = "pcs",
-        barcode: String = "",
-        updatedAt: Long = System.currentTimeMillis()
-    ) : this(
-        id = id,
-        name = name,
-        sku = sku,
-        category = category,
-        costPrice = costPrice,
-        sellingPrice = price,
-        stockQuantity = stockQuantity,
-        minStockThreshold = minStockThreshold,
-        unit = unit,
-        barcode = barcode,
-        updatedAt = updatedAt
-    )
-}
 
 @Entity(tableName = "users")
 data class UserEntity(
@@ -61,8 +11,37 @@ data class UserEntity(
     val role: String, // "ADMIN", "CASHIER", "CLERK"
     val pin: String = "1234",
     val email: String = "",
+    val branch: String = "Main Branch",
     val isActive: Boolean = true,
     val createdAt: Long = System.currentTimeMillis()
+)
+
+@Entity(tableName = "categories")
+data class CategoryEntity(
+    @PrimaryKey(autoGenerate = true)
+    val id: Long = 0,
+    val name: String,
+    val description: String = "",
+    val colorHex: String = "#0D9488",
+    val createdAt: Long = System.currentTimeMillis()
+)
+
+@Entity(tableName = "branches")
+data class BranchEntity(
+    @PrimaryKey(autoGenerate = true)
+    val id: Long = 0,
+    val name: String,
+    val code: String = "",
+    val address: String = "",
+    val phone: String = "",
+    val isMain: Boolean = false,
+    val createdAt: Long = System.currentTimeMillis(),
+    val receiptHeader: String = "TR COFFEE • កាហ្វេ ទីរ៉ូ",
+    val receiptSubtitle: String = "Official Sales Receipt & Tax Invoice",
+    val receiptVatTin: String = "VAT TIN: K001-90213847",
+    val receiptFooter: String = "Thank you for shopping with us! • Goods returnable within 7 days",
+    val taxPercent: Double = 8.0,
+    val receiptGap: Int = 12 // Spacing gap between receipt sections in dp/lines
 )
 
 @Entity(tableName = "sales")
@@ -82,7 +61,10 @@ data class SaleEntity(
     val amountTendered: Double,
     val changeGiven: Double,
     val itemsCount: Int,
-    val notes: String = ""
+    val notes: String = "",
+    val branchName: String = "Main Branch",
+    val taxPercent: Double = 8.0,
+    val receiptGap: Int = 12
 )
 
 @Entity(tableName = "sale_items")
@@ -96,7 +78,8 @@ data class SaleItemEntity(
     val unitPrice: Double,
     val costPrice: Double,
     val quantity: Int,
-    val itemTotal: Double
+    val itemTotal: Double,
+    val imageUrl: String = ""
 )
 
 @Entity(tableName = "stock_movements")

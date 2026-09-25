@@ -1,5 +1,10 @@
 package com.example.ui.stock
 
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.PickVisualMediaRequest
+import androidx.activity.result.contract.ActivityResultContracts
+import android.net.Uri
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -22,15 +27,27 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.AddPhotoAlternate
+import androidx.compose.material.icons.filled.AdminPanelSettings
+import androidx.compose.material.icons.filled.Category
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.FilterList
+import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.Inventory2
+import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.PhotoLibrary
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Storefront
 import androidx.compose.material.icons.filled.TrendingDown
 import androidx.compose.material.icons.filled.TrendingUp
 import androidx.compose.material.icons.filled.Warning
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import com.example.ui.components.ProductThumbnail
+import com.example.ui.components.ProductImageCatalog
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -50,22 +67,29 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import java.io.File
 import com.example.data.model.ProductEntity
 import com.example.ui.MainViewModel
 import com.example.ui.StockFilter
@@ -94,17 +118,32 @@ fun StockScreen(
     val searchQuery by viewModel.stockSearchQuery.collectAsState()
     val stockFilter by viewModel.stockFilter.collectAsState()
     val categoryFilter by viewModel.stockCategoryFilter.collectAsState()
+    val branchFilter by viewModel.stockBranchFilter.collectAsState()
+    val allCategories by viewModel.allCategories.collectAsState()
+    val categoryNames by viewModel.categoryNames.collectAsState()
+    val allBranches by viewModel.allBranches.collectAsState()
+    val activeBranch by viewModel.activeBranch.collectAsState()
+    val branchNames by viewModel.branchNames.collectAsState()
+    val isCurrentUserAdmin by viewModel.isCurrentUserAdmin.collectAsState()
 
     var productToAdjust by remember { mutableStateOf<ProductEntity?>(null) }
     var productToEdit by remember { mutableStateOf<ProductEntity?>(null) }
+    var productToDelete by remember { mutableStateOf<ProductEntity?>(null) }
     var showAddDialog by remember { mutableStateOf(false) }
+    var showCategoryManagementDialog by remember { mutableStateOf(false) }
+    var showBranchManagementDialog by remember { mutableStateOf(false) }
 
     val totalSkus = allProducts.size
     val totalUnits = allProducts.sumOf { it.stockQuantity }
     val lowStockCount = allProducts.count { it.stockQuantity in 1..it.minStockThreshold }
     val outOfStockCount = allProducts.count { it.stockQuantity <= 0 }
 
-    val categories = listOf("All", "Beverages", "Bakery", "Snacks", "Electronics", "Home & Goods", "Personal Care", "Apparel")
+    val displayCategories = remember(categoryNames) {
+        listOf("All") + categoryNames.filter { it.isNotBlank() }
+    }
+    val displayBranches = remember(branchNames) {
+        listOf("All Branches") + branchNames.filter { it.isNotBlank() }
+    }
 
     Box(modifier = modifier.fillMaxSize()) {
         Column(
@@ -215,13 +254,76 @@ fun StockScreen(
                 )
             }
 
-            // Category scroll row
+            // Quick management actions for Categories & Branches
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 2.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                OutlinedButton(
+                    onClick = { showCategoryManagementDialog = true },
+                    shape = RoundedCornerShape(10.dp),
+                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+                    modifier = Modifier.weight(1f).testTag("manage_categories_btn")
+                ) {
+                    Icon(Icons.Filled.Category, contentDescription = null, modifier = Modifier.size(15.dp), tint = RetailTealPrimary)
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text("Categories (${allCategories.size})", fontSize = 11.sp, color = RetailSlate900, fontWeight = FontWeight.SemiBold)
+                }
+
+                OutlinedButton(
+                    onClick = { showBranchManagementDialog = true },
+                    shape = RoundedCornerShape(10.dp),
+                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+                    modifier = Modifier.weight(1f).testTag("manage_branches_btn")
+                ) {
+                    Icon(Icons.Filled.Storefront, contentDescription = null, modifier = Modifier.size(15.dp), tint = RetailTealPrimary)
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text("Branches (${allBranches.size})", fontSize = 11.sp, color = RetailSlate900, fontWeight = FontWeight.SemiBold)
+                }
+            }
+
+            // Branch filter row
+            LazyRow(
+                contentPadding = PaddingValues(horizontal = 16.dp),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                modifier = Modifier.padding(top = 2.dp, bottom = 4.dp)
+            ) {
+                items(displayBranches) { br ->
+                    val isSelected = branchFilter.equals(br, ignoreCase = true)
+                    FilterChip(
+                        selected = isSelected,
+                        onClick = { viewModel.setStockBranchFilter(br) },
+                        label = {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(
+                                    Icons.Filled.Storefront,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(12.dp),
+                                    tint = if (isSelected) Color.White else RetailSlate500
+                                )
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text(br, fontSize = 11.sp)
+                            }
+                        },
+                        shape = RoundedCornerShape(14.dp),
+                        colors = FilterChipDefaults.filterChipColors(
+                            selectedContainerColor = RetailSlate900,
+                            selectedLabelColor = Color.White
+                        )
+                    )
+                }
+            }
+
+            // Category filter row
             LazyRow(
                 contentPadding = PaddingValues(horizontal = 16.dp),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 modifier = Modifier.padding(bottom = 6.dp)
             ) {
-                items(categories) { cat ->
+                items(displayCategories) { cat ->
                     val isSelected = categoryFilter.equals(cat, ignoreCase = true)
                     FilterChip(
                         selected = isSelected,
@@ -229,6 +331,66 @@ fun StockScreen(
                         label = { Text(cat, fontSize = 12.sp) },
                         shape = RoundedCornerShape(14.dp)
                     )
+                }
+            }
+
+            // Role Permission Notice for Item Editing & Deletion
+            if (isCurrentUserAdmin) {
+                Surface(
+                    color = Color(0xFFFEF3C7),
+                    shape = RoundedCornerShape(10.dp),
+                    border = BorderStroke(1.dp, Color(0xFFFDE68A)),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 4.dp)
+                        .testTag("admin_item_permissions_banner")
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 7.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.AdminPanelSettings,
+                            contentDescription = null,
+                            tint = Color(0xFF92400E),
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "Admin Mode: Item edit & delete controls enabled.",
+                            fontSize = 11.5.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = Color(0xFF92400E)
+                        )
+                    }
+                }
+            } else {
+                Surface(
+                    color = RetailSlate100,
+                    shape = RoundedCornerShape(10.dp),
+                    border = BorderStroke(1.dp, RetailSlate300),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 4.dp)
+                        .testTag("staff_item_permissions_banner")
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 7.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.Lock,
+                            contentDescription = null,
+                            tint = RetailSlate500,
+                            modifier = Modifier.size(15.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "Staff View: Edit & delete on items are restricted to Admin.",
+                            fontSize = 11.sp,
+                            color = RetailSlate700
+                        )
+                    }
                 }
             }
 
@@ -251,35 +413,83 @@ fun StockScreen(
                     items(filteredProducts, key = { it.id }) { product ->
                         StockProductCard(
                             product = product,
+                            isAdmin = isCurrentUserAdmin,
                             onAdjust = { productToAdjust = product },
-                            onEdit = { productToEdit = product },
-                            onDelete = { viewModel.deleteProduct(product) }
+                            onEdit = {
+                                if (isCurrentUserAdmin) {
+                                    productToEdit = product
+                                }
+                            },
+                            onDelete = {
+                                if (isCurrentUserAdmin) {
+                                    productToDelete = product
+                                }
+                            }
                         )
                     }
                 }
             }
         }
 
-        // Add Product Floating Action Button
-        FloatingActionButton(
-            onClick = { showAddDialog = true },
-            containerColor = RetailTealPrimary,
-            contentColor = Color.White,
-            shape = RoundedCornerShape(16.dp),
-            modifier = Modifier
-                .align(Alignment.BottomEnd)
-                .padding(16.dp)
-                .testTag("add_product_fab")
-        ) {
-            Row(
-                modifier = Modifier.padding(horizontal = 16.dp),
-                verticalAlignment = Alignment.CenterVertically
+        // Add Product Floating Action Button (Only available to Admin users)
+        if (isCurrentUserAdmin) {
+            FloatingActionButton(
+                onClick = { showAddDialog = true },
+                containerColor = RetailTealPrimary,
+                contentColor = Color.White,
+                shape = RoundedCornerShape(16.dp),
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .padding(16.dp)
+                    .testTag("add_product_fab")
             ) {
-                Icon(Icons.Filled.Add, contentDescription = "Add Product")
-                Spacer(modifier = Modifier.width(6.dp))
-                Text("New Product", fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                Row(
+                    modifier = Modifier.padding(horizontal = 16.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(Icons.Filled.Add, contentDescription = "Add Product")
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text("New Product", fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                }
             }
         }
+    }
+
+    // Admin Confirmation Dialog for Deleting an Item
+    productToDelete?.let { product ->
+        AlertDialog(
+            onDismissRequest = { productToDelete = null },
+            icon = {
+                Icon(Icons.Filled.Delete, contentDescription = null, tint = Color.Red)
+            },
+            title = {
+                Text("Delete Item", fontWeight = FontWeight.Bold)
+            },
+            text = {
+                Text("Are you sure you want to permanently delete \"${product.name}\" (SKU: ${product.sku}) from the catalog? This admin action cannot be undone.")
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        viewModel.deleteProduct(product)
+                        productToDelete = null
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = Color.Red),
+                    shape = RoundedCornerShape(8.dp),
+                    modifier = Modifier.testTag("confirm_delete_product_btn")
+                ) {
+                    Text("Delete Item", fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                OutlinedButton(
+                    onClick = { productToDelete = null },
+                    shape = RoundedCornerShape(8.dp)
+                ) {
+                    Text("Cancel")
+                }
+            }
+        )
     }
 
     // Adjust Stock Dialog
@@ -294,13 +504,59 @@ fun StockScreen(
         )
     }
 
+    // Category & Branch Management Dialogs
+    if (showCategoryManagementDialog) {
+        ManageCategoriesDialog(
+            categories = allCategories,
+            products = allProducts,
+            onDismiss = { showCategoryManagementDialog = false },
+            onAddCategory = { name, desc, color ->
+                viewModel.addCategory(name, desc, color)
+            },
+            onEditCategory = { category, newName, newDesc, newColor ->
+                viewModel.editCategory(category, newName, newDesc, newColor)
+            },
+            onDeleteCategory = { category ->
+                viewModel.deleteCategory(category, "General")
+            }
+        )
+    }
+
+    if (showBranchManagementDialog) {
+        ManageBranchesDialog(
+            branches = allBranches,
+            products = allProducts,
+            activeBranch = activeBranch,
+            onDismiss = { showBranchManagementDialog = false },
+            onAddBranch = { name, code, addr, phone, isMain ->
+                viewModel.addBranch(name, code, addr, phone, isMain)
+            },
+            onEditBranch = { branch, newName, newCode, newAddr, newPhone, isMain ->
+                viewModel.editBranch(branch, newName, newCode, newAddr, newPhone, isMain)
+            },
+            onDeleteBranch = { branch ->
+                viewModel.deleteBranch(branch, "Main Branch")
+            },
+            onUpdateBranchReceiptConfig = { branch, header, subtitle, vatTin, addr, phone, footer, taxPct, gap, setAsActive ->
+                viewModel.updateBranchReceiptConfig(branch, header, subtitle, vatTin, addr, phone, footer, taxPct, gap, setAsActive)
+            },
+            onSetActiveBranch = { branch ->
+                viewModel.setActiveBranch(branch)
+            }
+        )
+    }
+
     // Add or Edit Product Dialog
     if (showAddDialog) {
         AddEditProductDialog(
             product = null,
+            availableCategories = categoryNames,
+            availableBranches = branchNames,
             onDismiss = { showAddDialog = false },
-            onSave = { name, sku, category, cost, price, stock, threshold, unit ->
-                viewModel.addProduct(name, sku, category, cost, price, stock, threshold, unit)
+            onManageCategories = { showCategoryManagementDialog = true },
+            onManageBranches = { showBranchManagementDialog = true },
+            onSave = { name, sku, category, cost, price, stock, threshold, unit, branch, imgUrl ->
+                viewModel.addProduct(name, sku, category, cost, price, stock, threshold, unit, barcode = "", branch = branch, imageUrl = imgUrl)
                 showAddDialog = false
             }
         )
@@ -309,8 +565,12 @@ fun StockScreen(
     productToEdit?.let { product ->
         AddEditProductDialog(
             product = product,
+            availableCategories = categoryNames,
+            availableBranches = branchNames,
             onDismiss = { productToEdit = null },
-            onSave = { name, sku, category, cost, price, stock, threshold, unit ->
+            onManageCategories = { showCategoryManagementDialog = true },
+            onManageBranches = { showBranchManagementDialog = true },
+            onSave = { name, sku, category, cost, price, stock, threshold, unit, branch, imgUrl ->
                 viewModel.updateProduct(
                     product.copy(
                         name = name,
@@ -321,6 +581,8 @@ fun StockScreen(
                         stockQuantity = stock,
                         minStockThreshold = threshold,
                         unit = unit,
+                        branch = branch,
+                        imageUrl = imgUrl,
                         updatedAt = System.currentTimeMillis()
                     )
                 )
@@ -361,6 +623,7 @@ fun StockMetricCard(
 @Composable
 fun StockProductCard(
     product: ProductEntity,
+    isAdmin: Boolean = false,
     onAdjust: () -> Unit,
     onEdit: () -> Unit,
     onDelete: () -> Unit
@@ -381,19 +644,46 @@ fun StockProductCard(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.Top
             ) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = product.name,
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 15.sp,
-                        color = RetailSlate900
+                Row(
+                    modifier = Modifier.weight(1f),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    ProductThumbnail(
+                        imageUrl = product.imageUrl,
+                        productName = product.name,
+                        category = product.category,
+                        modifier = Modifier.size(56.dp),
+                        shape = RoundedCornerShape(10.dp)
                     )
-                    Spacer(modifier = Modifier.height(2.dp))
-                    Text(
-                        text = "SKU: ${product.sku} • Category: ${product.category}",
-                        fontSize = 12.sp,
-                        color = RetailSlate500
-                    )
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = product.name,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 15.sp,
+                            color = RetailSlate900
+                        )
+                        Spacer(modifier = Modifier.height(2.dp))
+                        Text(
+                            text = "SKU: ${product.sku} • Category: ${product.category}",
+                            fontSize = 12.sp,
+                            color = RetailSlate500
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Surface(
+                            color = RetailSlate100,
+                            shape = RoundedCornerShape(6.dp)
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                            ) {
+                                Icon(Icons.Filled.Storefront, contentDescription = null, tint = RetailSlate700, modifier = Modifier.size(11.dp))
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text(product.branch, fontSize = 11.sp, color = RetailSlate700, fontWeight = FontWeight.Medium)
+                            }
+                        }
+                    }
                 }
                 StockBadge(quantity = product.stockQuantity, threshold = product.minStockThreshold)
             }
@@ -440,13 +730,21 @@ fun StockProductCard(
                 horizontalArrangement = Arrangement.End,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                IconButton(onClick = onEdit) {
-                    Icon(Icons.Filled.Edit, contentDescription = "Edit", tint = RetailSlate700, modifier = Modifier.size(18.dp))
+                if (isAdmin) {
+                    IconButton(
+                        onClick = onEdit,
+                        modifier = Modifier.testTag("edit_product_btn_${product.id}")
+                    ) {
+                        Icon(Icons.Filled.Edit, contentDescription = "Edit Item", tint = RetailSlate700, modifier = Modifier.size(18.dp))
+                    }
+                    IconButton(
+                        onClick = onDelete,
+                        modifier = Modifier.testTag("delete_product_btn_${product.id}")
+                    ) {
+                        Icon(Icons.Filled.Delete, contentDescription = "Delete Item", tint = Color.Red, modifier = Modifier.size(18.dp))
+                    }
+                    Spacer(modifier = Modifier.width(4.dp))
                 }
-                IconButton(onClick = onDelete) {
-                    Icon(Icons.Filled.Delete, contentDescription = "Delete", tint = Color.Red, modifier = Modifier.size(18.dp))
-                }
-                Spacer(modifier = Modifier.width(4.dp))
                 Button(
                     onClick = onAdjust,
                     colors = ButtonDefaults.buttonColors(containerColor = RetailTealPrimary),
@@ -593,19 +891,64 @@ fun AdjustStockDialog(
 @Composable
 fun AddEditProductDialog(
     product: ProductEntity?,
+    availableCategories: List<String>,
+    availableBranches: List<String>,
     onDismiss: () -> Unit,
-    onSave: (String, String, String, Double, Double, Int, Int, String) -> Unit
+    onSave: (String, String, String, Double, Double, Int, Int, String, String, String) -> Unit,
+    onManageCategories: (() -> Unit)? = null,
+    onManageBranches: (() -> Unit)? = null
 ) {
     var name by remember { mutableStateOf(product?.name ?: "") }
     var sku by remember { mutableStateOf(product?.sku ?: "") }
-    var category by remember { mutableStateOf(product?.category ?: "Beverages") }
+    var category by remember { mutableStateOf(product?.category ?: (availableCategories.firstOrNull() ?: "Beverages")) }
+    var branch by remember { mutableStateOf(product?.branch ?: (availableBranches.firstOrNull() ?: "Main Branch")) }
+    var customBranchInput by remember { mutableStateOf("") }
+    var isCustomBranch by remember { mutableStateOf(false) }
     var costPriceText by remember { mutableStateOf(product?.costPrice?.toString() ?: "1.50") }
     var sellingPriceText by remember { mutableStateOf(product?.sellingPrice?.toString() ?: "3.50") }
     var stockText by remember { mutableStateOf(product?.stockQuantity?.toString() ?: "20") }
     var thresholdText by remember { mutableStateOf(product?.minStockThreshold?.toString() ?: "5") }
     var unit by remember { mutableStateOf(product?.unit ?: "pcs") }
+    var imageUrl by remember { mutableStateOf(product?.imageUrl ?: "") }
+    var isUploadingPhoto by remember { mutableStateOf(false) }
 
-    val categories = listOf("Beverages", "Bakery", "Snacks", "Electronics", "Home & Goods", "Personal Care", "Apparel")
+    val context = LocalContext.current
+    val coroutineScope = rememberCoroutineScope()
+
+    val photoPickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.PickVisualMedia()
+    ) { pickedUri: Uri? ->
+        if (pickedUri != null) {
+            isUploadingPhoto = true
+            coroutineScope.launch(Dispatchers.IO) {
+                try {
+                    val imagesDir = File(context.filesDir, "product_images").apply { mkdirs() }
+                    val destFile = File(imagesDir, "prod_${System.currentTimeMillis()}.jpg")
+                    context.contentResolver.openInputStream(pickedUri)?.use { input ->
+                        destFile.outputStream().use { output ->
+                            input.copyTo(output)
+                        }
+                    }
+                    withContext(Dispatchers.Main) {
+                        imageUrl = destFile.toURI().toString()
+                        isUploadingPhoto = false
+                    }
+                } catch (e: Exception) {
+                    withContext(Dispatchers.Main) {
+                        imageUrl = pickedUri.toString()
+                        isUploadingPhoto = false
+                    }
+                }
+            }
+        }
+    }
+
+    val categories = remember(availableCategories) {
+        if (availableCategories.isNotEmpty()) availableCategories else listOf("Beverages", "Bakery", "Snacks", "Electronics", "General")
+    }
+    val branches = remember(availableBranches) {
+        if (availableBranches.isNotEmpty()) availableBranches else listOf("Main Branch", "Downtown Branch", "Uptown Kiosk")
+    }
 
     Dialog(onDismissRequest = onDismiss) {
         Surface(
@@ -614,7 +957,9 @@ fun AddEditProductDialog(
             modifier = Modifier.fillMaxWidth().padding(4.dp)
         ) {
             Column(
-                modifier = Modifier.padding(20.dp),
+                modifier = Modifier
+                    .padding(20.dp)
+                    .verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
                 Text(
@@ -623,6 +968,114 @@ fun AddEditProductDialog(
                     fontSize = 18.sp,
                     color = RetailSlate900
                 )
+
+                // Product Image Preview, Photo Picker & Presets
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text("Product Image", fontSize = 12.sp, color = RetailSlate500, fontWeight = FontWeight.SemiBold)
+                    if (imageUrl.isNotBlank()) {
+                        Text(
+                            "Clear Image",
+                            fontSize = 11.sp,
+                            color = Color(0xFFDC2626),
+                            fontWeight = FontWeight.Medium,
+                            modifier = Modifier.clickable { imageUrl = "" }
+                        )
+                    }
+                }
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    ProductThumbnail(
+                        imageUrl = imageUrl.ifBlank { null },
+                        productName = name.ifBlank { "Item" },
+                        category = category,
+                        modifier = Modifier.size(56.dp),
+                        shape = RoundedCornerShape(10.dp)
+                    )
+                    Spacer(modifier = Modifier.width(10.dp))
+                    Column(
+                        modifier = Modifier.weight(1f),
+                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        OutlinedButton(
+                            onClick = {
+                                photoPickerLauncher.launch(
+                                    PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
+                                )
+                            },
+                            shape = RoundedCornerShape(8.dp),
+                            modifier = Modifier.fillMaxWidth().testTag("pick_product_photo_btn"),
+                            colors = ButtonDefaults.outlinedButtonColors(
+                                contentColor = RetailTealPrimary
+                            ),
+                            border = BorderStroke(1.2.dp, RetailTealPrimary)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Filled.AddPhotoAlternate,
+                                contentDescription = "Pick Image",
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                if (isUploadingPhoto) "Loading Photo..." else "Choose from Gallery / Photos",
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                        }
+
+                        OutlinedTextField(
+                            value = imageUrl,
+                            onValueChange = { imageUrl = it },
+                            label = { Text("Or Web Image URL (optional)") },
+                            placeholder = { Text("https://... or select preset") },
+                            singleLine = true,
+                            shape = RoundedCornerShape(8.dp),
+                            modifier = Modifier.fillMaxWidth().testTag("product_image_url_input")
+                        )
+                    }
+                }
+
+                Text("Quick Preset Photos", fontSize = 11.sp, color = RetailSlate500)
+                LazyRow(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    items(ProductImageCatalog.PRESET_IMAGES) { preset ->
+                        val isSelected = imageUrl == preset.url
+                        Surface(
+                            shape = RoundedCornerShape(8.dp),
+                            color = if (isSelected) RetailTealPrimary.copy(alpha = 0.15f) else RetailSlate100,
+                            border = if (isSelected) androidx.compose.foundation.BorderStroke(1.5.dp, RetailTealPrimary) else null,
+                            modifier = Modifier.clickable { imageUrl = preset.url }
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp)
+                            ) {
+                                ProductThumbnail(
+                                    imageUrl = preset.url,
+                                    productName = preset.label,
+                                    category = preset.category,
+                                    modifier = Modifier.size(24.dp),
+                                    shape = RoundedCornerShape(4.dp)
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(
+                                    preset.label,
+                                    fontSize = 11.sp,
+                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                                    color = if (isSelected) RetailTealPrimary else RetailSlate700
+                                )
+                            }
+                        }
+                    }
+                }
 
                 OutlinedTextField(
                     value = name,
@@ -653,19 +1106,86 @@ fun AddEditProductDialog(
                 }
 
                 // Category selector chips
-                Text("Category", fontSize = 12.sp, color = RetailSlate500)
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text("Category", fontSize = 12.sp, color = RetailSlate500, fontWeight = FontWeight.SemiBold)
+                    onManageCategories?.let {
+                        TextButton(
+                            onClick = it,
+                            contentPadding = PaddingValues(horizontal = 4.dp, vertical = 0.dp)
+                        ) {
+                            Text("Edit Categories", fontSize = 11.sp, color = RetailTealPrimary)
+                        }
+                    }
+                }
                 LazyRow(
                     horizontalArrangement = Arrangement.spacedBy(6.dp),
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     items(categories) { cat ->
                         FilterChip(
-                            selected = category == cat,
+                            selected = category.equals(cat, ignoreCase = true),
                             onClick = { category = cat },
                             label = { Text(cat, fontSize = 11.sp) },
                             shape = RoundedCornerShape(12.dp)
                         )
                     }
+                }
+
+                // Branch selector chips
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text("Store Branch", fontSize = 12.sp, color = RetailSlate500, fontWeight = FontWeight.SemiBold)
+                    onManageBranches?.let {
+                        TextButton(
+                            onClick = it,
+                            contentPadding = PaddingValues(horizontal = 4.dp, vertical = 0.dp)
+                        ) {
+                            Text("Edit Branches", fontSize = 11.sp, color = RetailTealPrimary)
+                        }
+                    }
+                }
+                LazyRow(
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    items(branches) { br ->
+                        val isSelected = !isCustomBranch && branch.equals(br, ignoreCase = true)
+                        FilterChip(
+                            selected = isSelected,
+                            onClick = {
+                                branch = br
+                                isCustomBranch = false
+                            },
+                            label = { Text(br, fontSize = 11.sp) },
+                            shape = RoundedCornerShape(12.dp)
+                        )
+                    }
+                    item {
+                        FilterChip(
+                            selected = isCustomBranch,
+                            onClick = { isCustomBranch = true },
+                            label = { Text("+ Custom Branch", fontSize = 11.sp) },
+                            shape = RoundedCornerShape(12.dp)
+                        )
+                    }
+                }
+
+                if (isCustomBranch) {
+                    OutlinedTextField(
+                        value = customBranchInput,
+                        onValueChange = { customBranchInput = it },
+                        label = { Text("Specify Branch Name") },
+                        singleLine = true,
+                        shape = RoundedCornerShape(8.dp),
+                        modifier = Modifier.fillMaxWidth().testTag("custom_branch_input")
+                    )
                 }
 
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -724,7 +1244,12 @@ fun AddEditProductDialog(
                             val price = sellingPriceText.toDoubleOrNull() ?: 0.0
                             val stock = stockText.toIntOrNull() ?: 0
                             val threshold = thresholdText.toIntOrNull() ?: 5
-                            onSave(name, sku, category, cost, price, stock, threshold, unit)
+                            val finalBranch = if (isCustomBranch && customBranchInput.isNotBlank()) {
+                                customBranchInput.trim()
+                            } else {
+                                branch.trim().ifBlank { "Main Branch" }
+                            }
+                            onSave(name, sku, category, cost, price, stock, threshold, unit, finalBranch, imageUrl.trim())
                         },
                         enabled = name.isNotBlank(),
                         colors = ButtonDefaults.buttonColors(containerColor = RetailTealPrimary),

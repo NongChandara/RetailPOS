@@ -6,12 +6,18 @@ import androidx.room.Room
 import androidx.room.RoomDatabase
 import androidx.sqlite.db.SupportSQLiteDatabase
 import com.example.data.dao.ActivityLogDao
+import com.example.data.dao.BranchDao
+import com.example.data.dao.CategoryDao
+import com.example.data.dao.ClientDao
 import com.example.data.dao.ProductDao
 import com.example.data.dao.SaleDao
 import com.example.data.dao.StockMovementDao
 import com.example.data.dao.UserDao
 import com.example.data.model.ActivityCategory
 import com.example.data.model.ActivityLogEntity
+import com.example.data.model.BranchEntity
+import com.example.data.model.CategoryEntity
+import com.example.data.model.ClientEntity
 import com.example.data.model.ProductEntity
 import com.example.data.model.SaleEntity
 import com.example.data.model.SaleItemEntity
@@ -28,9 +34,12 @@ import kotlinx.coroutines.launch
         SaleEntity::class,
         SaleItemEntity::class,
         StockMovementEntity::class,
-        ActivityLogEntity::class
+        ActivityLogEntity::class,
+        CategoryEntity::class,
+        BranchEntity::class,
+        ClientEntity::class
     ],
-    version = 2,
+    version = 7,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -39,6 +48,9 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun saleDao(): SaleDao
     abstract fun stockMovementDao(): StockMovementDao
     abstract fun activityLogDao(): ActivityLogDao
+    abstract fun categoryDao(): CategoryDao
+    abstract fun branchDao(): BranchDao
+    abstract fun clientDao(): ClientDao
 
     companion object {
         @Volatile
@@ -76,6 +88,66 @@ abstract class AppDatabase : RoomDatabase() {
             val productDao = database.productDao()
             val userDao = database.userDao()
             val stockMovementDao = database.stockMovementDao()
+            val categoryDao = database.categoryDao()
+            val branchDao = database.branchDao()
+
+            if (categoryDao.countCategories() == 0) {
+                val initialCategories = listOf(
+                    CategoryEntity(name = "Beverages", description = "Cold brews, juices, sodas and bottled water", colorHex = "#0EA5E9"),
+                    CategoryEntity(name = "Bakery", description = "Freshly baked artisan bread and pastries", colorHex = "#F59E0B"),
+                    CategoryEntity(name = "Snacks", description = "Chips, nuts, chocolate and bars", colorHex = "#10B981"),
+                    CategoryEntity(name = "Electronics", description = "Chargers, cables, headphones and gadgets", colorHex = "#6366F1"),
+                    CategoryEntity(name = "Home & Goods", description = "Eco cleaning supplies and candles", colorHex = "#8B5CF6"),
+                    CategoryEntity(name = "Personal Care", description = "Soaps, lotions and sanitizers", colorHex = "#EC4899"),
+                    CategoryEntity(name = "Apparel", description = "T-shirts, tote bags and caps", colorHex = "#14B8A6")
+                )
+                categoryDao.insertCategories(initialCategories)
+            }
+
+            if (branchDao.countBranches() == 0) {
+                val initialBranches = listOf(
+                    BranchEntity(
+                        name = "Main Branch",
+                        code = "MB-01",
+                        address = "123 Norodom Blvd, Daun Penh, Phnom Penh",
+                        phone = "+855 23 888 999",
+                        isMain = true,
+                        receiptHeader = "TR COFFEE • Main Branch (កាហ្វេ ទីរ៉ូ)",
+                        receiptSubtitle = "Official Sales Receipt & Tax Invoice",
+                        receiptVatTin = "VAT TIN: K001-90213847",
+                        receiptFooter = "Thank you for visiting TR Coffee! • Goods returnable within 7 days",
+                        taxPercent = 8.0,
+                        receiptGap = 12
+                    ),
+                    BranchEntity(
+                        name = "Downtown Branch",
+                        code = "DT-02",
+                        address = "842 Monivong Blvd, Boeung Keng Kang, Phnom Penh",
+                        phone = "+855 23 888 888",
+                        isMain = false,
+                        receiptHeader = "TR COFFEE • Downtown Branch",
+                        receiptSubtitle = "Official Sales Receipt & Tax Invoice",
+                        receiptVatTin = "VAT TIN: K001-90213848",
+                        receiptFooter = "Thank you for shopping Downtown! • Free Wi-Fi: TR_Downtown",
+                        taxPercent = 10.0,
+                        receiptGap = 12
+                    ),
+                    BranchEntity(
+                        name = "Warehouse Depot",
+                        code = "WH-03",
+                        address = "12 Veng Sreng Blvd, Pur Senchey, Phnom Penh",
+                        phone = "+855 23 888 777",
+                        isMain = false,
+                        receiptHeader = "TR STORE • Wholesale & Distribution",
+                        receiptSubtitle = "Warehouse Dispatch & Commercial Invoice",
+                        receiptVatTin = "VAT TIN: K001-90213849",
+                        receiptFooter = "Commercial wholesale terms apply • Inspect goods upon delivery",
+                        taxPercent = 5.0,
+                        receiptGap = 12
+                    )
+                )
+                branchDao.insertBranches(initialBranches)
+            }
 
             if (userDao.countUsers() == 0) {
                 val initialUsers = listOf(
@@ -112,18 +184,32 @@ abstract class AppDatabase : RoomDatabase() {
                         stockQuantity = 28,
                         minStockThreshold = 8,
                         unit = "can",
-                        barcode = "011122233344"
+                        barcode = "011122233344",
+                        imageUrl = "https://images.unsplash.com/photo-1517701604599-bb29b565090c?auto=format&fit=crop&w=400&q=80"
+                    ),
+                    ProductEntity(
+                        name = "TR Signature Iced Latte",
+                        sku = "BEV-002",
+                        category = "Beverages",
+                        costPrice = 1.20,
+                        sellingPrice = 3.50,
+                        stockQuantity = 35,
+                        minStockThreshold = 10,
+                        unit = "cup",
+                        barcode = "011122233345",
+                        imageUrl = "https://images.unsplash.com/photo-1541167760496-1628856ab772?auto=format&fit=crop&w=400&q=80"
                     ),
                     ProductEntity(
                         name = "Sparkling Spring Water 500ml",
-                        sku = "BEV-002",
+                        sku = "BEV-003",
                         category = "Beverages",
                         costPrice = 0.50,
                         sellingPrice = 1.75,
                         stockQuantity = 45,
                         minStockThreshold = 12,
                         unit = "bottle",
-                        barcode = "011122233345"
+                        barcode = "011122233346",
+                        imageUrl = "https://images.unsplash.com/photo-1548839140-29a749e1bc4e?auto=format&fit=crop&w=400&q=80"
                     ),
                     ProductEntity(
                         name = "Artisan Sourdough Loaf",
@@ -134,7 +220,20 @@ abstract class AppDatabase : RoomDatabase() {
                         stockQuantity = 4, // low stock!
                         minStockThreshold = 6,
                         unit = "loaf",
-                        barcode = "011122233346"
+                        barcode = "011122233347",
+                        imageUrl = "https://images.unsplash.com/photo-1589367920969-ab8e050bbb04?auto=format&fit=crop&w=400&q=80"
+                    ),
+                    ProductEntity(
+                        name = "French Butter Croissant",
+                        sku = "BAK-002",
+                        category = "Bakery",
+                        costPrice = 1.10,
+                        sellingPrice = 2.75,
+                        stockQuantity = 18,
+                        minStockThreshold = 6,
+                        unit = "pcs",
+                        barcode = "011122233348",
+                        imageUrl = "https://images.unsplash.com/photo-1555507036-ab1f4038808a?auto=format&fit=crop&w=400&q=80"
                     ),
                     ProductEntity(
                         name = "Dark Chocolate Almond Bar 85g",
@@ -145,7 +244,8 @@ abstract class AppDatabase : RoomDatabase() {
                         stockQuantity = 32,
                         minStockThreshold = 10,
                         unit = "bar",
-                        barcode = "011122233347"
+                        barcode = "011122233349",
+                        imageUrl = "https://images.unsplash.com/photo-1548907040-4baa42d10919?auto=format&fit=crop&w=400&q=80"
                     ),
                     ProductEntity(
                         name = "Sea Salt Kettle Chips 150g",
@@ -156,7 +256,8 @@ abstract class AppDatabase : RoomDatabase() {
                         stockQuantity = 19,
                         minStockThreshold = 8,
                         unit = "pack",
-                        barcode = "011122233348"
+                        barcode = "011122233350",
+                        imageUrl = "https://images.unsplash.com/photo-1566478989037-eec170784d0b?auto=format&fit=crop&w=400&q=80"
                     ),
                     ProductEntity(
                         name = "USB-C Fast Charging Cable 2m",
@@ -167,7 +268,8 @@ abstract class AppDatabase : RoomDatabase() {
                         stockQuantity = 14,
                         minStockThreshold = 5,
                         unit = "pcs",
-                        barcode = "011122233349"
+                        barcode = "011122233351",
+                        imageUrl = "https://images.unsplash.com/photo-1544816155-12df9643f363?auto=format&fit=crop&w=400&q=80"
                     ),
                     ProductEntity(
                         name = "Wireless Optical Mouse 2.4G",
@@ -178,7 +280,8 @@ abstract class AppDatabase : RoomDatabase() {
                         stockQuantity = 2, // low stock!
                         minStockThreshold = 4,
                         unit = "pcs",
-                        barcode = "011122233350"
+                        barcode = "011122233352",
+                        imageUrl = "https://images.unsplash.com/photo-1615663245857-ac93bb7c39e7?auto=format&fit=crop&w=400&q=80"
                     ),
                     ProductEntity(
                         name = "Eco Bamboo Travel Cutlery Set",
@@ -189,7 +292,8 @@ abstract class AppDatabase : RoomDatabase() {
                         stockQuantity = 9,
                         minStockThreshold = 5,
                         unit = "set",
-                        barcode = "011122233351"
+                        barcode = "011122233353",
+                        imageUrl = "https://images.unsplash.com/photo-1584308666744-24d5c474f2ae?auto=format&fit=crop&w=400&q=80"
                     ),
                     ProductEntity(
                         name = "Natural Beeswax Lip Balm",
@@ -200,7 +304,32 @@ abstract class AppDatabase : RoomDatabase() {
                         stockQuantity = 0, // out of stock!
                         minStockThreshold = 5,
                         unit = "pcs",
-                        barcode = "011122233352"
+                        barcode = "011122233354",
+                        imageUrl = "https://images.unsplash.com/photo-1586495777744-4413f21062fa?auto=format&fit=crop&w=400&q=80"
+                    ),
+                    ProductEntity(
+                        name = "Brightening Vitamin C Glow Serum",
+                        sku = "COS-001",
+                        category = "Personal Care",
+                        costPrice = 7.50,
+                        sellingPrice = 16.50,
+                        stockQuantity = 25,
+                        minStockThreshold = 6,
+                        unit = "bottle",
+                        barcode = "011122233355",
+                        imageUrl = "https://images.unsplash.com/photo-1620916566398-39f1143ab7be?auto=format&fit=crop&w=400&q=80"
+                    ),
+                    ProductEntity(
+                        name = "Ultra Shield SPF 50+ Sunscreen",
+                        sku = "COS-002",
+                        category = "Personal Care",
+                        costPrice = 6.20,
+                        sellingPrice = 14.00,
+                        stockQuantity = 30,
+                        minStockThreshold = 8,
+                        unit = "tube",
+                        barcode = "011122233356",
+                        imageUrl = "https://images.unsplash.com/photo-1556228720-195a672e8a03?auto=format&fit=crop&w=400&q=80"
                     ),
                     ProductEntity(
                         name = "Recycled Cotton Canvas Tote",
@@ -211,7 +340,8 @@ abstract class AppDatabase : RoomDatabase() {
                         stockQuantity = 22,
                         minStockThreshold = 6,
                         unit = "pcs",
-                        barcode = "011122233353"
+                        barcode = "011122233357",
+                        imageUrl = "https://images.unsplash.com/photo-1597484661643-2f5fef640dd1?auto=format&fit=crop&w=400&q=80"
                     )
                 )
                 productDao.insertProducts(initialProducts)
@@ -426,6 +556,74 @@ abstract class AppDatabase : RoomDatabase() {
                     )
                 )
                 activityLogDao.insertLogs(seedLogs)
+            }
+
+            // Seed Client Profiles if empty
+            val clientDao = database.clientDao()
+            if (clientDao.countClients() == 0) {
+                val seedClients = listOf(
+                    ClientEntity(
+                        name = "Sok Dara (សុខ តារា)",
+                        phone = "012 889 900",
+                        email = "sok.dara@gmail.com",
+                        tier = "VIP",
+                        loyaltyPoints = 450,
+                        totalSpent = 185.50,
+                        visitsCount = 38,
+                        favoriteOrder = "Iced Latte 50% Sugar, Oat Milk",
+                        notes = "Regular customer every morning at 8:30 AM. Prefers less ice.",
+                        address = "BKK1, Phnom Penh"
+                    ),
+                    ClientEntity(
+                        name = "Chan Chenda (ចាន់ ចិន្តា)",
+                        phone = "098 776 543",
+                        email = "chenda.c@outlook.com",
+                        tier = "GOLD",
+                        loyaltyPoints = 280,
+                        totalSpent = 112.00,
+                        visitsCount = 24,
+                        favoriteOrder = "Green Tea Frappe with extra espresso shot",
+                        notes = "Gold member since last year. Likes pastry pairing.",
+                        address = "Toul Kork, Phnom Penh"
+                    ),
+                    ClientEntity(
+                        name = "Michael Chen",
+                        phone = "085 332 114",
+                        email = "m.chen.biz@gmail.com",
+                        tier = "SILVER",
+                        loyaltyPoints = 140,
+                        totalSpent = 64.00,
+                        visitsCount = 16,
+                        favoriteOrder = "Hot Double Espresso, Dark Roast",
+                        notes = "Usually sits at outdoor table 4 with laptop.",
+                        address = "Daun Penh, Phnom Penh"
+                    ),
+                    ClientEntity(
+                        name = "Keo Vicheka (កែវ វិច្ឆិកា)",
+                        phone = "015 667 889",
+                        email = "vicheka.keo@gmail.com",
+                        tier = "BRONZE",
+                        loyaltyPoints = 50,
+                        totalSpent = 22.50,
+                        visitsCount = 6,
+                        favoriteOrder = "Hot Cappuccino, Cinnamon sprinkle",
+                        notes = "New member, likes mild roast coffee.",
+                        address = "Chroy Changvar, Phnom Penh"
+                    ),
+                    ClientEntity(
+                        name = "Seng Sophea (សេង សុភា)",
+                        phone = "077 123 456",
+                        email = "sophea.seng@yahoo.com",
+                        tier = "GOLD",
+                        loyaltyPoints = 310,
+                        totalSpent = 135.00,
+                        visitsCount = 29,
+                        favoriteOrder = "Signature TR Iced Coffee, Normal Sweet",
+                        notes = "Company team orders frequently for afternoon meetings.",
+                        address = "Russian Market, Phnom Penh"
+                    )
+                )
+                clientDao.insertClients(seedClients)
             }
         }
     }

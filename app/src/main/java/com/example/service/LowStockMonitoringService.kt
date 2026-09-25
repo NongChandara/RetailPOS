@@ -55,18 +55,26 @@ class LowStockMonitoringService : Service() {
                 .addTag(PERIODIC_WORK_TAG)
                 .build()
 
-            WorkManager.getInstance(context).enqueueUniquePeriodicWork(
-                PERIODIC_WORK_TAG,
-                ExistingPeriodicWorkPolicy.UPDATE,
-                periodicRequest
-            )
+            try {
+                WorkManager.getInstance(context).enqueueUniquePeriodicWork(
+                    PERIODIC_WORK_TAG,
+                    ExistingPeriodicWorkPolicy.UPDATE,
+                    periodicRequest
+                )
+            } catch (e: Throwable) {
+                android.util.Log.w("LowStockMonitoringService", "WorkManager not available: ${e.message}")
+            }
         }
 
         /**
          * Cancels periodic background monitoring.
          */
         fun cancelPeriodicMonitoring(context: Context) {
-            WorkManager.getInstance(context).cancelUniqueWork(PERIODIC_WORK_TAG)
+            try {
+                WorkManager.getInstance(context).cancelUniqueWork(PERIODIC_WORK_TAG)
+            } catch (e: Throwable) {
+                android.util.Log.w("LowStockMonitoringService", "WorkManager not available: ${e.message}")
+            }
         }
 
         /**
@@ -84,11 +92,15 @@ class LowStockMonitoringService : Service() {
                 .addTag(IMMEDIATE_WORK_TAG)
                 .build()
 
-            WorkManager.getInstance(context).enqueueUniqueWork(
-                IMMEDIATE_WORK_TAG,
-                ExistingWorkPolicy.REPLACE,
-                oneTimeRequest
-            )
+            try {
+                WorkManager.getInstance(context).enqueueUniqueWork(
+                    IMMEDIATE_WORK_TAG,
+                    ExistingWorkPolicy.REPLACE,
+                    oneTimeRequest
+                )
+            } catch (e: Throwable) {
+                android.util.Log.w("LowStockMonitoringService", "WorkManager not available: ${e.message}")
+            }
         }
 
         /**

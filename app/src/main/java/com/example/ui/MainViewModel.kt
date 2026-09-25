@@ -6,6 +6,9 @@ import androidx.lifecycle.viewModelScope
 import com.example.data.AppDatabase
 import com.example.data.model.ActivityCategory
 import com.example.data.model.ActivityLogEntity
+import com.example.data.model.BranchEntity
+import com.example.data.model.CategoryEntity
+import com.example.data.model.ClientEntity
 import com.example.data.model.ProductEntity
 import com.example.data.model.SaleEntity
 import com.example.data.model.SaleItemEntity
@@ -21,6 +24,7 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
@@ -174,6 +178,36 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     val allActivityLogs: StateFlow<List<ActivityLogEntity>> = repository.allLogs
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
+    val allCategories: StateFlow<List<CategoryEntity>> = repository.allCategoriesList
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    val allBranches: StateFlow<List<BranchEntity>> = repository.allBranchesList
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    // Dynamic category names from registered categories and existing product records
+    val categoryNames: StateFlow<List<String>> = combine(allCategories, allProducts) { categories, products ->
+        val set = linkedSetOf<String>()
+        categories.forEach { if (it.name.isNotBlank()) set.add(it.name) }
+        products.forEach { if (it.category.isNotBlank()) set.add(it.category) }
+        if (set.isEmpty()) {
+            listOf("Beverages", "Bakery", "Snacks", "Electronics", "Home & Goods", "Personal Care", "Apparel")
+        } else {
+            set.toList()
+        }
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    // Dynamic branch names from registered branches and existing product records
+    val branchNames: StateFlow<List<String>> = combine(allBranches, allProducts) { branches, products ->
+        val set = linkedSetOf<String>()
+        branches.forEach { if (it.name.isNotBlank()) set.add(it.name) }
+        products.forEach { if (it.branch.isNotBlank()) set.add(it.branch) }
+        if (set.isEmpty()) {
+            listOf("Main Branch", "Downtown Branch", "Warehouse Depot")
+        } else {
+            set.toList()
+        }
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
     // Activity Log Filters
     private val _activityCategoryFilter = MutableStateFlow("ALL")
     val activityCategoryFilter: StateFlow<String> = _activityCategoryFilter.asStateFlow()
@@ -206,12 +240,38 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val _currentUser = MutableStateFlow<UserEntity?>(null)
     val currentUser: StateFlow<UserEntity?> = _currentUser.asStateFlow()
 
+    private val _activeBranch = MutableStateFlow<BranchEntity?>(null)
+    val activeBranch: StateFlow<BranchEntity?> = _activeBranch.asStateFlow()
+
+    val isCurrentUserAdmin: StateFlow<Boolean> = _currentUser
+        .map { it?.role?.equals("ADMIN", ignoreCase = true) == true }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, false)
+
     init {
         // Automatically select the default admin or first user once loaded
         viewModelScope.launch {
             repository.allUsers.collect { users ->
                 if (_currentUser.value == null && users.isNotEmpty()) {
                     _currentUser.value = users.firstOrNull { it.role == "ADMIN" } ?: users.first()
+                }
+            }
+        }
+
+        // Automatically select the main or active branch for POS & receipt follow-up
+        viewModelScope.launch {
+            repository.allBranchesList.collect { branches ->
+                if (branches.isNotEmpty()) {
+                    val current = _activeBranch.value
+                    if (current == null) {
+                        val mainBranch = branches.firstOrNull { it.isMain } ?: branches.first()
+                        _activeBranch.value = mainBranch
+                        _taxRate.value = (mainBranch.taxPercent / 100.0).coerceAtLeast(0.0)
+                    } else {
+                        // Refresh active branch if updated in database
+                        branches.firstOrNull { it.id == current.id }?.let { updated ->
+                            _activeBranch.value = updated
+                        }
+                    }
                 }
             }
         }
@@ -259,25 +319,46 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val _stockCategoryFilter = MutableStateFlow("All")
     val stockCategoryFilter: StateFlow<String> = _stockCategoryFilter.asStateFlow()
 
+    private val _stockBranchFilter = MutableStateFlow("All Branches")
+    val stockBranchFilter: StateFlow<String> = _stockBranchFilter.asStateFlow()
+
     val filteredStockProducts: StateFlow<List<ProductEntity>> = combine(
         allProducts,
         _stockSearchQuery,
         _stockFilter,
-        _stockCategoryFilter
-    ) { products, query, filter, cat ->
+        _stockCategoryFilter,
+        _stockBranchFilter
+    ) { products, query, filter, cat, branch ->
         products.filter { p ->
             val matchesQuery = query.isBlank() ||
                     p.name.contains(query, ignoreCase = true) ||
                     p.sku.contains(query, ignoreCase = true)
             val matchesCategory = (cat == "All" || p.category.equals(cat, ignoreCase = true))
+            val matchesBranch = (branch == "All Branches" || p.branch.equals(branch, ignoreCase = true))
             val matchesFilter = when (filter) {
                 StockFilter.ALL -> true
                 StockFilter.LOW_STOCK -> p.stockQuantity in 1..p.minStockThreshold
                 StockFilter.OUT_OF_STOCK -> p.stockQuantity <= 0
             }
-            matchesQuery && matchesCategory && matchesFilter
+            matchesQuery && matchesCategory && matchesBranch && matchesFilter
         }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    fun setStockSearchQuery(query: String) {
+        _stockSearchQuery.value = query
+    }
+
+    fun setStockFilter(filter: StockFilter) {
+        _stockFilter.value = filter
+    }
+
+    fun setStockCategoryFilter(category: String) {
+        _stockCategoryFilter.value = category
+    }
+
+    fun setStockBranchFilter(branch: String) {
+        _stockBranchFilter.value = branch
+    }
 
     // Completed Sale / Receipt State
     private val _completedSale = MutableStateFlow<Pair<SaleEntity, List<SaleItemEntity>>?>(null)
@@ -413,18 +494,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         _selectedCategory.value = category
     }
 
-    fun setStockSearchQuery(query: String) {
-        _stockSearchQuery.value = query
-    }
-
-    fun setStockFilter(filter: StockFilter) {
-        _stockFilter.value = filter
-    }
-
-    fun setStockCategoryFilter(category: String) {
-        _stockCategoryFilter.value = category
-    }
-
     // Checkout processing
     fun processCheckout(
         paymentMethod: String,
@@ -444,6 +513,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
         val receiptNum = "REC-${SimpleDateFormat("yyMMdd", Locale.US).format(Date())}-${Random.nextInt(1000, 9999)}"
 
+        val activeBr = _activeBranch.value
+        val branchName = activeBr?.name ?: "Main Branch"
+        val taxPct = _taxRate.value * 100.0
+        val receiptGap = activeBr?.receiptGap ?: 12
+
         val saleEntity = SaleEntity(
             receiptNumber = receiptNum,
             timestamp = System.currentTimeMillis(),
@@ -458,7 +532,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             amountTendered = amountTendered,
             changeGiven = changeGiven,
             itemsCount = items.sumOf { it.quantity },
-            notes = notes
+            notes = notes,
+            branchName = branchName,
+            taxPercent = taxPct,
+            receiptGap = receiptGap
         )
 
         val saleItems = items.map { item ->
@@ -470,7 +547,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 unitPrice = item.product.sellingPrice,
                 costPrice = item.product.costPrice,
                 quantity = item.quantity,
-                itemTotal = item.subtotal
+                itemTotal = item.subtotal,
+                imageUrl = item.product.imageUrl
             )
         }
 
@@ -530,7 +608,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         initialStock: Int,
         minThreshold: Int,
         unit: String,
-        barcode: String = ""
+        barcode: String = "",
+        branch: String = "Main Branch",
+        imageUrl: String = ""
     ) {
         val user = _currentUser.value
         val operator = user?.name ?: "Store Manager"
@@ -546,7 +626,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             stockQuantity = initialStock,
             minStockThreshold = minThreshold,
             unit = unit,
-            barcode = barcode.trim()
+            barcode = barcode.trim(),
+            branch = branch.trim().ifBlank { "Main Branch" },
+            imageUrl = imageUrl.trim()
         )
         viewModelScope.launch {
             repository.insertProduct(
@@ -555,15 +637,20 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 staffId = staffId,
                 staffRole = staffRole
             )
-            _toastMessage.value = "Product '$name' created with $initialStock $unit in stock"
+            _toastMessage.value = "Product '$name' created in $branch with $initialStock $unit in stock"
         }
     }
 
     fun updateProduct(product: ProductEntity) {
         val user = _currentUser.value
-        val operator = user?.name ?: "Staff"
+        val isAdmin = user?.role?.equals("ADMIN", ignoreCase = true) == true || isCurrentUserAdmin.value
+        if (!isAdmin) {
+            _toastMessage.value = "Action restricted: Only Admin users can edit items"
+            return
+        }
+        val operator = user?.name ?: "Admin"
         val staffId = user?.id ?: 1L
-        val staffRole = user?.role ?: "STAFF"
+        val staffRole = user?.role ?: "ADMIN"
 
         viewModelScope.launch {
             repository.updateProduct(
@@ -578,9 +665,14 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun deleteProduct(product: ProductEntity) {
         val user = _currentUser.value
-        val operator = user?.name ?: "Staff"
+        val isAdmin = user?.role?.equals("ADMIN", ignoreCase = true) == true || isCurrentUserAdmin.value
+        if (!isAdmin) {
+            _toastMessage.value = "Action restricted: Only Admin users can delete items"
+            return
+        }
+        val operator = user?.name ?: "Admin"
         val staffId = user?.id ?: 1L
-        val staffRole = user?.role ?: "STAFF"
+        val staffRole = user?.role ?: "ADMIN"
 
         viewModelScope.launch {
             repository.deleteProduct(
@@ -590,6 +682,187 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 staffRole = staffRole
             )
             _toastMessage.value = "Product '${product.name}' removed"
+        }
+    }
+
+    // Category Management
+    fun addCategory(name: String, description: String = "", colorHex: String = "#0D9488") {
+        val trimmed = name.trim()
+        if (trimmed.isBlank()) return
+        val user = _currentUser.value
+        val operator = user?.name ?: "Store Manager"
+        val staffId = user?.id ?: 1L
+        viewModelScope.launch {
+            val cat = CategoryEntity(
+                name = trimmed,
+                description = description.trim(),
+                colorHex = colorHex
+            )
+            repository.insertCategory(cat)
+            _toastMessage.value = "Category '$trimmed' created"
+        }
+    }
+
+    fun editCategory(category: CategoryEntity, newName: String, newDescription: String = "", newColorHex: String = "#0D9488") {
+        val trimmedNew = newName.trim()
+        if (trimmedNew.isBlank()) return
+        val user = _currentUser.value
+        val operator = user?.name ?: "Store Manager"
+        val staffId = user?.id ?: 1L
+        viewModelScope.launch {
+            val updated = category.copy(
+                name = trimmedNew,
+                description = newDescription.trim(),
+                colorHex = newColorHex
+            )
+            repository.updateCategory(
+                oldName = category.name,
+                category = updated,
+                operatorName = operator,
+                staffId = staffId
+            )
+            _toastMessage.value = "Category updated: '${category.name}' -> '$trimmedNew'"
+        }
+    }
+
+    fun deleteCategory(category: CategoryEntity, fallbackCategory: String = "General") {
+        val user = _currentUser.value
+        val operator = user?.name ?: "Store Manager"
+        val staffId = user?.id ?: 1L
+        viewModelScope.launch {
+            repository.deleteCategory(
+                category = category,
+                fallbackCategory = fallbackCategory,
+                operatorName = operator,
+                staffId = staffId
+            )
+            _toastMessage.value = "Category '${category.name}' deleted (reassigned to '$fallbackCategory')"
+        }
+    }
+
+    // Branch Management
+    fun addBranch(name: String, code: String = "", address: String = "", phone: String = "", isMain: Boolean = false) {
+        val trimmed = name.trim()
+        if (trimmed.isBlank()) return
+        val user = _currentUser.value
+        val operator = user?.name ?: "Store Manager"
+        val staffId = user?.id ?: 1L
+        viewModelScope.launch {
+            val branch = BranchEntity(
+                name = trimmed,
+                code = code.trim().ifBlank { "BR-${Random.nextInt(10, 99)}" },
+                address = address.trim(),
+                phone = phone.trim(),
+                isMain = isMain
+            )
+            repository.insertBranch(branch)
+            _toastMessage.value = "Branch '$trimmed' created"
+        }
+    }
+
+    fun editBranch(branch: BranchEntity, newName: String, newCode: String = "", newAddress: String = "", newPhone: String = "", isMain: Boolean = false) {
+        val trimmedNew = newName.trim()
+        if (trimmedNew.isBlank()) return
+        val user = _currentUser.value
+        val operator = user?.name ?: "Store Manager"
+        val staffId = user?.id ?: 1L
+        viewModelScope.launch {
+            val updated = branch.copy(
+                name = trimmedNew,
+                code = newCode.trim(),
+                address = newAddress.trim(),
+                phone = newPhone.trim(),
+                isMain = isMain
+            )
+            repository.updateBranch(
+                oldName = branch.name,
+                branch = updated,
+                operatorName = operator,
+                staffId = staffId
+            )
+            _toastMessage.value = "Branch updated: '${branch.name}' -> '$trimmedNew'"
+        }
+    }
+
+    fun deleteBranch(branch: BranchEntity, fallbackBranch: String = "Main Branch") {
+        val user = _currentUser.value
+        val operator = user?.name ?: "Store Manager"
+        val staffId = user?.id ?: 1L
+        viewModelScope.launch {
+            repository.deleteBranch(
+                branch = branch,
+                fallbackBranch = fallbackBranch,
+                operatorName = operator,
+                staffId = staffId
+            )
+            _toastMessage.value = "Branch '${branch.name}' deleted (reassigned to '$fallbackBranch')"
+        }
+    }
+
+    // Branch Receipt & Tax Customization
+    fun setActiveBranch(branch: BranchEntity) {
+        _activeBranch.value = branch
+        _taxRate.value = (branch.taxPercent / 100.0).coerceAtLeast(0.0)
+        _toastMessage.value = "Active POS branch: ${branch.name} (Tax: ${branch.taxPercent}%)"
+    }
+
+    fun setTaxPercent(percent: Double, updateBranchDefault: Boolean = false) {
+        val sanitized = percent.coerceIn(0.0, 100.0)
+        _taxRate.value = sanitized / 100.0
+        if (updateBranchDefault) {
+            val branch = _activeBranch.value
+            if (branch != null) {
+                viewModelScope.launch {
+                    val updated = branch.copy(taxPercent = sanitized)
+                    val user = _currentUser.value
+                    val operator = user?.name ?: "Store Manager"
+                    val staffId = user?.id ?: 1L
+                    repository.updateBranchReceiptConfig(updated, operator, staffId)
+                    _activeBranch.value = updated
+                    _toastMessage.value = "Default tax for ${branch.name} set to ${sanitized}%"
+                }
+                return
+            }
+        }
+        _toastMessage.value = "Tax rate set to ${sanitized}%"
+    }
+
+    fun setTaxRate(rate: Double) {
+        _taxRate.value = rate.coerceAtLeast(0.0)
+    }
+
+    fun updateBranchReceiptConfig(
+        branch: BranchEntity,
+        receiptHeader: String,
+        receiptSubtitle: String,
+        receiptVatTin: String,
+        address: String,
+        phone: String,
+        receiptFooter: String,
+        taxPercent: Double,
+        receiptGap: Int,
+        setAsActive: Boolean = false
+    ) {
+        val user = _currentUser.value
+        val operator = user?.name ?: "Store Manager"
+        val staffId = user?.id ?: 1L
+        viewModelScope.launch {
+            val updated = branch.copy(
+                receiptHeader = receiptHeader.trim().ifBlank { "TR COFFEE • ${branch.name}" },
+                receiptSubtitle = receiptSubtitle.trim().ifBlank { "Official Sales Receipt & Tax Invoice" },
+                receiptVatTin = receiptVatTin.trim(),
+                address = address.trim(),
+                phone = phone.trim(),
+                receiptFooter = receiptFooter.trim(),
+                taxPercent = taxPercent.coerceIn(0.0, 100.0),
+                receiptGap = receiptGap.coerceIn(4, 40)
+            )
+            repository.updateBranchReceiptConfig(updated, operator, staffId)
+            if (setAsActive || _activeBranch.value?.id == branch.id) {
+                _activeBranch.value = updated
+                _taxRate.value = updated.taxPercent / 100.0
+            }
+            _toastMessage.value = "Receipt & tax settings saved for '${branch.name}'"
         }
     }
 
@@ -605,6 +878,27 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             } else {
                 onError("Invalid PIN code. Try again.")
             }
+        }
+    }
+
+    suspend fun verifyAdminPin(pin: String): UserEntity? {
+        val matchedUser = repository.getUserByPin(pin)
+        return if (matchedUser != null && matchedUser.role.equals("ADMIN", ignoreCase = true)) {
+            val auditLog = ActivityLogEntity.createSecureLog(
+                staffId = matchedUser.id,
+                staffName = matchedUser.name,
+                staffRole = matchedUser.role,
+                category = ActivityCategory.STAFF_SECURITY,
+                action = "ADMIN_BAKONG_AUTH",
+                entityType = "PAYMENT",
+                entityId = "BAKONG-AUTH-${System.currentTimeMillis()}",
+                details = "Admin ${matchedUser.name} verified credentials to expose Bakong KHQR payment controls",
+                metadataJson = """{"adminId":${matchedUser.id},"authorizedMethod":"KHQR"}"""
+            )
+            repository.logActivity(auditLog)
+            matchedUser
+        } else {
+            null
         }
     }
 
@@ -698,6 +992,120 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             repository.deleteUser(user)
             _toastMessage.value = "Staff member '${user.name}' removed"
+        }
+    }
+
+    // ==========================================
+    // Client Profiles State & Operations
+    // ==========================================
+    val allClients: StateFlow<List<ClientEntity>> = repository.allClients
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    private val _clientSearchQuery = MutableStateFlow("")
+    val clientSearchQuery: StateFlow<String> = _clientSearchQuery.asStateFlow()
+
+    private val _clientTierFilter = MutableStateFlow("ALL")
+    val clientTierFilter: StateFlow<String> = _clientTierFilter.asStateFlow()
+
+    private val _selectedClient = MutableStateFlow<ClientEntity?>(null)
+    val selectedClient: StateFlow<ClientEntity?> = _selectedClient.asStateFlow()
+
+    val filteredClients: StateFlow<List<ClientEntity>> = combine(
+        allClients,
+        _clientSearchQuery,
+        _clientTierFilter
+    ) { clients, query, tier ->
+        clients.filter { client ->
+            val matchesQuery = query.isBlank() ||
+                    client.name.contains(query, ignoreCase = true) ||
+                    client.phone.contains(query, ignoreCase = true) ||
+                    client.email.contains(query, ignoreCase = true) ||
+                    client.favoriteOrder.contains(query, ignoreCase = true)
+
+            val matchesTier = tier == "ALL" || client.tier.equals(tier, ignoreCase = true)
+
+            matchesQuery && matchesTier
+        }
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    fun setClientSearchQuery(query: String) {
+        _clientSearchQuery.value = query
+    }
+
+    fun setClientTierFilter(tier: String) {
+        _clientTierFilter.value = tier
+    }
+
+    fun selectClient(client: ClientEntity?) {
+        _selectedClient.value = client
+    }
+
+    fun createClient(
+        name: String,
+        phone: String,
+        email: String = "",
+        tier: String = "BRONZE",
+        initialPoints: Int = 0,
+        favoriteOrder: String = "",
+        notes: String = "",
+        address: String = ""
+    ) {
+        val operator = _currentUser.value?.name ?: "Staff"
+        val staffId = _currentUser.value?.id ?: 1L
+        viewModelScope.launch {
+            val newClient = ClientEntity(
+                name = name.trim(),
+                phone = phone.trim(),
+                email = email.trim(),
+                tier = tier,
+                loyaltyPoints = initialPoints,
+                favoriteOrder = favoriteOrder.trim(),
+                notes = notes.trim(),
+                address = address.trim()
+            )
+            repository.insertClient(newClient, operator, staffId)
+            _toastMessage.value = "Client profile '${newClient.name}' created!"
+        }
+    }
+
+    fun updateClient(client: ClientEntity) {
+        val operator = _currentUser.value?.name ?: "Staff"
+        val staffId = _currentUser.value?.id ?: 1L
+        viewModelScope.launch {
+            repository.updateClient(client, operator, staffId)
+            if (_selectedClient.value?.id == client.id) {
+                _selectedClient.value = client
+            }
+            _toastMessage.value = "Client '${client.name}' profile updated"
+        }
+    }
+
+    fun deleteClient(client: ClientEntity) {
+        val operator = _currentUser.value?.name ?: "Staff"
+        val staffId = _currentUser.value?.id ?: 1L
+        viewModelScope.launch {
+            repository.deleteClient(client, operator, staffId)
+            if (_selectedClient.value?.id == client.id) {
+                _selectedClient.value = null
+            }
+            _toastMessage.value = "Client '${client.name}' deleted"
+        }
+    }
+
+    fun adjustClientPoints(client: ClientEntity, delta: Int, reason: String) {
+        val operator = _currentUser.value?.name ?: "Staff"
+        val staffId = _currentUser.value?.id ?: 1L
+        viewModelScope.launch {
+            repository.adjustClientPoints(client, delta, reason, operator, staffId)
+            val updated = client.copy(
+                loyaltyPoints = (client.loyaltyPoints + delta).coerceAtLeast(0),
+                updatedAt = System.currentTimeMillis()
+            )
+            if (_selectedClient.value?.id == client.id) {
+                _selectedClient.value = updated
+            }
+            val action = if (delta >= 0) "added" else "redeemed"
+            _toastMessage.value = "${if (delta >= 0) "+$delta" else "$delta"} points $action for ${client.name}!"
         }
     }
 }

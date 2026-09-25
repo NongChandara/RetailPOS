@@ -2,6 +2,7 @@ package com.example.util
 
 import android.content.Context
 import android.content.Intent
+import android.graphics.BitmapFactory
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.DashPathEffect
@@ -20,6 +21,8 @@ import android.print.PrintDocumentInfo
 import android.print.PrintManager
 import android.widget.Toast
 import androidx.core.content.FileProvider
+import com.example.R
+import com.example.data.model.BranchEntity
 import com.example.data.model.SaleEntity
 import com.example.data.model.SaleItemEntity
 import java.io.File
@@ -40,12 +43,14 @@ object PdfReceiptGenerator {
         context: Context,
         sale: SaleEntity,
         items: List<SaleItemEntity>,
-        khrExchangeRate: Double = CurrencyUtils.DEFAULT_KHR_EXCHANGE_RATE
+        khrExchangeRate: Double = CurrencyUtils.DEFAULT_KHR_EXCHANGE_RATE,
+        branch: BranchEntity? = null
     ): File {
+        val gap = (branch?.receiptGap ?: sale.receiptGap).coerceIn(4, 40)
         val pageWidth = 384
-        val baseHeaderHeight = 190
+        val baseHeaderHeight = 190 + gap
         val itemsHeight = (items.size * 32).coerceAtLeast(40)
-        val totalsAndFooterHeight = 320
+        val totalsAndFooterHeight = 320 + gap
         val pageHeight = baseHeaderHeight + itemsHeight + totalsAndFooterHeight
 
         val pdfDocument = PdfDocument()
@@ -93,25 +98,46 @@ object PdfReceiptGenerator {
         val contentWidth = rightMargin - leftMargin
         val centerX = pageWidth / 2f
 
-        var currentY = 36f
+        var currentY = 30f
 
-        // 1. Store Header
-        textPaint.textSize = 17f
+        // 1. Store Header with TR Coffee Logo
+        try {
+            val logoBitmap = BitmapFactory.decodeResource(context.resources, R.drawable.img_tr_coffee_logo)
+            if (logoBitmap != null) {
+                val logoSize = 44f
+                val logoLeft = centerX - (logoSize / 2f)
+                val destRect = RectF(logoLeft, currentY, logoLeft + logoSize, currentY + logoSize)
+                canvas.drawBitmap(logoBitmap, null, destRect, null)
+                currentY += logoSize + 10f
+            }
+        } catch (_: Exception) {
+            currentY += 8f
+        }
+
+        val receiptHeader = branch?.receiptHeader ?: "TR COFFEE • ${sale.branchName}"
+        val receiptSubtitle = branch?.receiptSubtitle ?: "Official Sales Receipt & Tax Invoice"
+        val branchAddress = branch?.address?.ifBlank { null } ?: "123 Norodom Blvd, Daun Penh, Phnom Penh"
+        val branchPhone = branch?.phone?.ifBlank { null } ?: "+855 23 888 999"
+        val branchVatTin = branch?.receiptVatTin?.ifBlank { null } ?: "VAT TIN: K001-90213847"
+
+        textPaint.textSize = 15f
         textPaint.typeface = Typeface.create(Typeface.MONOSPACE, Typeface.BOLD)
+        textPaint.color = Color.rgb(15, 77, 42)
         textPaint.textAlign = Paint.Align.CENTER
-        canvas.drawText("RETAIL POS STORE", centerX, currentY, textPaint)
+        canvas.drawText(receiptHeader, centerX, currentY, textPaint)
+        textPaint.color = Color.rgb(15, 23, 42) // Reset color to Slate 900
 
         currentY += 15f
         textPaint.textSize = 9.5f
         textPaint.typeface = Typeface.create(Typeface.MONOSPACE, Typeface.NORMAL)
         textPaint.textAlign = Paint.Align.CENTER
-        canvas.drawText("Official Sales Receipt & Tax Invoice", centerX, currentY, mutedPaint)
+        canvas.drawText(receiptSubtitle, centerX, currentY, mutedPaint)
 
-        currentY += 14f
-        canvas.drawText("123 Commerce Way, Suite 100 • (555) 019-2834", centerX, currentY, mutedPaint)
+        currentY += 13f
+        canvas.drawText("$branchAddress • $branchPhone", centerX, currentY, mutedPaint)
 
-        currentY += 14f
-        canvas.drawText("www.retailpos-store.com", centerX, currentY, mutedPaint)
+        currentY += 13f
+        canvas.drawText(branchVatTin, centerX, currentY, mutedPaint)
 
         // Divider
         currentY += 12f
@@ -238,9 +264,15 @@ object PdfReceiptGenerator {
         }
 
         currentY += 14f
-        val taxPercent = if (sale.subtotal - sale.discountAmount > 0) ((sale.taxAmount / (sale.subtotal - sale.discountAmount)) * 100 + 0.5).toInt() else 8
+        val taxPercentStr = if (sale.taxPercent > 0.0) {
+            String.format(Locale.US, "%.1f", sale.taxPercent).removeSuffix(".0")
+        } else if (branch != null && branch.taxPercent > 0.0) {
+            String.format(Locale.US, "%.1f", branch.taxPercent).removeSuffix(".0")
+        } else if (sale.subtotal - sale.discountAmount > 0) {
+            String.format(Locale.US, "%.1f", ((sale.taxAmount / (sale.subtotal - sale.discountAmount)) * 100)).removeSuffix(".0")
+        } else "8"
         textPaint.textAlign = Paint.Align.LEFT
-        canvas.drawText("SALES TAX ($taxPercent%):", leftMargin, currentY, textPaint)
+        canvas.drawText("SALES TAX ($taxPercentStr%):", leftMargin, currentY, textPaint)
         textPaint.textAlign = Paint.Align.RIGHT
         canvas.drawText(String.format(Locale.US, "$%.2f", sale.taxAmount), rightMargin, currentY, textPaint)
 
@@ -317,10 +349,11 @@ object PdfReceiptGenerator {
         currentY += 18f
         mutedPaint.textAlign = Paint.Align.CENTER
         mutedPaint.textSize = 9f
-        canvas.drawText("Thank you for supporting our local business!", centerX, currentY, mutedPaint)
+        val footerText = branch?.receiptFooter?.ifBlank { null } ?: "Thank you for supporting our local business!"
+        canvas.drawText(footerText, centerX, currentY, mutedPaint)
 
         currentY += 12f
-        canvas.drawText("Items returnable within 30 days with this receipt.", centerX, currentY, mutedPaint)
+        canvas.drawText("Items returnable within 7 days with this digital receipt.", centerX, currentY, mutedPaint)
 
         currentY += 12f
         mutedPaint.textSize = 8f
@@ -433,14 +466,16 @@ object PdfReceiptGenerator {
     }
 
     /**
-     * Sends the PDF receipt directly to the Android Print Service.
+     * Sends the receipt directly to the connected thermal printer using Android PrintManager.
      */
     fun printReceiptPdf(context: Context, pdfFile: File, receiptNumber: String) {
         val printManager = context.getSystemService(Context.PRINT_SERVICE) as? PrintManager
         if (printManager == null) {
-            Toast.makeText(context, "Print service unavailable", Toast.LENGTH_SHORT).show()
+            Toast.makeText(context, "Android PrintManager unavailable on device", Toast.LENGTH_SHORT).show()
             return
         }
+
+        Toast.makeText(context, "Sending receipt #$receiptNumber to thermal printer...", Toast.LENGTH_SHORT).show()
 
         val printAdapter = object : PrintDocumentAdapter() {
             override fun onLayout(
@@ -489,6 +524,21 @@ object PdfReceiptGenerator {
             }
         }
 
-        printManager.print("Receipt-$receiptNumber", printAdapter, PrintAttributes.Builder().build())
+        // Configure PrintAttributes for standard POS 80mm / 58mm roll thermal printers
+        val thermalMediaSize = PrintAttributes.MediaSize(
+            "THERMAL_RECEIPT_80MM",
+            "Thermal Receipt (80mm Roll)",
+            3150, // 80mm width in mils (~3.15 in)
+            11000 // continuous receipt roll length in mils
+        )
+
+        val printAttributes = PrintAttributes.Builder()
+            .setMediaSize(thermalMediaSize)
+            .setResolution(PrintAttributes.Resolution("thermal_203", "Thermal Head 203 DPI", 203, 203))
+            .setMinMargins(PrintAttributes.Margins.NO_MARGINS)
+            .setColorMode(PrintAttributes.COLOR_MODE_MONOCHROME)
+            .build()
+
+        printManager.print("Receipt-$receiptNumber", printAdapter, printAttributes)
     }
 }

@@ -57,6 +57,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -84,6 +85,7 @@ fun UsersScreen(
     var showAddUserDialog by remember { mutableStateOf(false) }
     var userToEdit by remember { mutableStateOf<UserEntity?>(null) }
     var showPinSwitchDialog by remember { mutableStateOf(false) }
+    var userToSwitchTo by remember { mutableStateOf<UserEntity?>(null) }
 
     Box(modifier = modifier.fillMaxSize()) {
         Column(
@@ -136,7 +138,7 @@ fun UsersScreen(
                                 RoleBadge(role = currentUser?.role ?: "GUEST")
                                 Spacer(modifier = Modifier.width(8.dp))
                                 Text(
-                                    text = "Active Cashier",
+                                    text = "Active Session",
                                     color = RetailStatusGreen,
                                     fontSize = 11.sp,
                                     fontWeight = FontWeight.SemiBold
@@ -146,7 +148,10 @@ fun UsersScreen(
                     }
 
                     Button(
-                        onClick = { showPinSwitchDialog = true },
+                        onClick = {
+                            userToSwitchTo = null
+                            showPinSwitchDialog = true
+                        },
                         colors = ButtonDefaults.buttonColors(containerColor = RetailTealPrimary),
                         shape = RoundedCornerShape(8.dp),
                         contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
@@ -173,7 +178,7 @@ fun UsersScreen(
                     color = RetailSlate900
                 )
                 Text(
-                    text = "Tap to quickly switch",
+                    text = "Tap profile to authenticate",
                     fontSize = 12.sp,
                     color = RetailSlate500
                 )
@@ -191,7 +196,12 @@ fun UsersScreen(
                     UserRowCard(
                         user = user,
                         isCurrent = user.id == currentUser?.id,
-                        onSelect = { viewModel.setCurrentUser(user) },
+                        onSelect = {
+                            if (user.id != currentUser?.id) {
+                                userToSwitchTo = user
+                                showPinSwitchDialog = true
+                            }
+                        },
                         onEdit = { userToEdit = user },
                         onDelete = { viewModel.deleteUser(user) }
                     )
@@ -221,16 +231,34 @@ fun UsersScreen(
         }
     }
 
-    // PIN Switch Dialog
+    // PIN Switch & Login Dialog
     if (showPinSwitchDialog) {
         PinSwitchDialog(
-            onDismiss = { showPinSwitchDialog = false },
+            targetUser = userToSwitchTo,
+            onDismiss = {
+                showPinSwitchDialog = false
+                userToSwitchTo = null
+            },
             onSubmitPin = { pin, onError ->
-                viewModel.switchUserByPin(
-                    pin = pin,
-                    onSuccess = { showPinSwitchDialog = false },
-                    onError = onError
-                )
+                val target = userToSwitchTo
+                if (target != null) {
+                    if (target.pin == pin) {
+                        viewModel.setCurrentUser(target)
+                        showPinSwitchDialog = false
+                        userToSwitchTo = null
+                    } else {
+                        onError("Invalid PIN for ${target.name}. Try again.")
+                    }
+                } else {
+                    viewModel.switchUserByPin(
+                        pin = pin,
+                        onSuccess = {
+                            showPinSwitchDialog = false
+                            userToSwitchTo = null
+                        },
+                        onError = onError
+                    )
+                }
             }
         )
     }
@@ -337,9 +365,17 @@ fun UserRowCard(
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         RoleBadge(role = user.role)
                         Spacer(modifier = Modifier.width(8.dp))
+                        Icon(
+                            Icons.Filled.Lock,
+                            contentDescription = "PIN Protected",
+                            tint = RetailSlate500,
+                            modifier = Modifier.size(11.dp)
+                        )
+                        Spacer(modifier = Modifier.width(3.dp))
                         Text(
-                            text = "PIN: ${user.pin}",
+                            text = "PIN: ••••",
                             fontSize = 11.sp,
+                            fontWeight = FontWeight.Medium,
                             color = RetailSlate500
                         )
                     }
@@ -360,6 +396,7 @@ fun UserRowCard(
 
 @Composable
 fun PinSwitchDialog(
+    targetUser: UserEntity? = null,
     onDismiss: () -> Unit,
     onSubmitPin: (String, (String) -> Unit) -> Unit
 ) {
@@ -388,14 +425,22 @@ fun PinSwitchDialog(
                 }
 
                 Text(
-                    text = "Enter Staff PIN",
+                    text = if (targetUser != null) "Login: ${targetUser.name}" else "Staff & Manager Login",
                     fontWeight = FontWeight.Bold,
                     fontSize = 18.sp,
                     color = RetailSlate900
                 )
 
+                if (targetUser != null) {
+                    RoleBadge(role = targetUser.role)
+                }
+
                 Text(
-                    text = "Quick switch to your cashier or manager profile using your 4-digit PIN.",
+                    text = if (targetUser != null) {
+                        "Enter the 4-digit PIN for ${targetUser.name} (${targetUser.role}) to authenticate session."
+                    } else {
+                        "Quick switch to your cashier or manager profile using your 4-digit PIN."
+                    },
                     fontSize = 12.sp,
                     color = RetailSlate500,
                     textAlign = TextAlign.Center
@@ -404,7 +449,7 @@ fun PinSwitchDialog(
                 OutlinedTextField(
                     value = pinText,
                     onValueChange = {
-                        if (it.length <= 4) {
+                        if (it.length <= 6 && it.all { c -> c.isDigit() }) {
                             pinText = it
                             errorMessage = null
                         }
@@ -422,7 +467,8 @@ fun PinSwitchDialog(
                         text = errorMessage ?: "",
                         color = Color.Red,
                         fontSize = 12.sp,
-                        fontWeight = FontWeight.SemiBold
+                        fontWeight = FontWeight.SemiBold,
+                        textAlign = TextAlign.Center
                     )
                 }
 
@@ -448,7 +494,7 @@ fun PinSwitchDialog(
                         shape = RoundedCornerShape(8.dp),
                         modifier = Modifier.weight(1f).testTag("submit_pin_btn")
                     ) {
-                        Text("Unlock / Switch")
+                        Text("Unlock / Login")
                     }
                 }
             }
@@ -504,14 +550,28 @@ fun AddEditUserDialog(
                     modifier = Modifier.fillMaxWidth()
                 )
 
+                var isPinMasked by remember { mutableStateOf(true) }
+
                 OutlinedTextField(
                     value = pin,
-                    onValueChange = { if (it.length <= 6) pin = it },
+                    onValueChange = { if (it.length <= 6 && it.all { c -> c.isDigit() }) pin = it },
                     label = { Text("Access PIN (4 digits)") },
+                    visualTransformation = if (isPinMasked) PasswordVisualTransformation() else VisualTransformation.None,
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
+                    trailingIcon = {
+                        Text(
+                            text = if (isPinMasked) "SHOW" else "HIDE",
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = RetailTealPrimary,
+                            modifier = Modifier
+                                .clickable { isPinMasked = !isPinMasked }
+                                .padding(horizontal = 10.dp, vertical = 6.dp)
+                        )
+                    },
                     singleLine = true,
                     shape = RoundedCornerShape(8.dp),
-                    modifier = Modifier.fillMaxWidth()
+                    modifier = Modifier.fillMaxWidth().testTag("user_pin_field")
                 )
 
                 Text("Assigned Role", fontSize = 12.sp, color = RetailSlate500, fontWeight = FontWeight.SemiBold)

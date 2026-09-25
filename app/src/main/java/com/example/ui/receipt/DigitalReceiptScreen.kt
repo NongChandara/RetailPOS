@@ -7,6 +7,7 @@ import android.widget.Toast
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.slideInVertically
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -32,6 +33,7 @@ import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.CurrencyExchange
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.PictureAsPdf
 import androidx.compose.material.icons.filled.Print
 import androidx.compose.material.icons.filled.QrCode
@@ -64,14 +66,17 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.R
 import com.example.data.model.SaleEntity
 import com.example.data.model.SaleItemEntity
+import com.example.ui.components.ProductThumbnail
 import com.example.ui.components.formatDateTime
 import com.example.ui.theme.RetailSlate100
 import com.example.ui.theme.RetailSlate300
@@ -101,6 +106,8 @@ fun DigitalReceiptScreen(
     sale: SaleEntity,
     items: List<SaleItemEntity>,
     khrRate: Double = CurrencyUtils.activeKhrExchangeRate,
+    branch: com.example.data.model.BranchEntity? = null,
+    onEditReceipt: (() -> Unit)? = null,
     onDismiss: () -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -110,10 +117,10 @@ fun DigitalReceiptScreen(
     var isGeneratingPdf by remember { mutableStateOf(false) }
 
     // Generate PDF receipt on launch
-    LaunchedEffect(sale.id, khrRate) {
+    LaunchedEffect(sale.id, khrRate, branch?.id, branch?.taxPercent, branch?.receiptHeader) {
         isGeneratingPdf = true
         try {
-            pdfFile = PdfReceiptGenerator.generateReceiptPdf(context, sale, items, khrRate)
+            pdfFile = PdfReceiptGenerator.generateReceiptPdf(context, sale, items, khrRate, branch)
         } catch (e: Exception) {
             android.util.Log.e("DigitalReceiptScreen", "Failed to generate receipt PDF", e)
         } finally {
@@ -199,7 +206,7 @@ fun DigitalReceiptScreen(
                     horizontalArrangement = Arrangement.spacedBy(10.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    // Secondary Action: Print
+                    // Secondary Action: Print Receipt
                     OutlinedButton(
                         onClick = {
                             val file = pdfFile ?: PdfReceiptGenerator.generateReceiptPdf(context, sale, items, khrRate).also { pdfFile = it }
@@ -207,13 +214,13 @@ fun DigitalReceiptScreen(
                         },
                         shape = RoundedCornerShape(10.dp),
                         modifier = Modifier
-                            .weight(1f)
+                            .weight(1.3f)
                             .height(48.dp)
-                            .testTag("print_pdf_receipt_button")
+                            .testTag("print_receipt_button")
                     ) {
-                        Icon(Icons.Filled.Print, contentDescription = "Print", modifier = Modifier.size(18.dp))
+                        Icon(Icons.Filled.Print, contentDescription = "Print Receipt", modifier = Modifier.size(18.dp))
                         Spacer(modifier = Modifier.width(6.dp))
-                        Text("Print", fontWeight = FontWeight.SemiBold)
+                        Text("Print Receipt", fontWeight = FontWeight.Bold, fontSize = 13.sp)
                     }
 
                     // Primary Action: New Sale / Done
@@ -463,7 +470,7 @@ fun DigitalReceiptScreen(
                         // Share PDF button
                         Button(
                             onClick = {
-                                val file = pdfFile ?: PdfReceiptGenerator.generateReceiptPdf(context, sale, items, khrRate).also { pdfFile = it }
+                                val file = pdfFile ?: PdfReceiptGenerator.generateReceiptPdf(context, sale, items, khrRate, branch).also { pdfFile = it }
                                 PdfReceiptGenerator.shareReceiptPdf(context, file, sale.receiptNumber)
                             },
                             colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF15803D)),
@@ -475,11 +482,32 @@ fun DigitalReceiptScreen(
                             Spacer(modifier = Modifier.width(4.dp))
                             Text("Share", fontSize = 12.sp, fontWeight = FontWeight.Bold)
                         }
+
+                        if (onEditReceipt != null) {
+                            OutlinedButton(
+                                onClick = onEditReceipt,
+                                shape = RoundedCornerShape(8.dp),
+                                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+                                modifier = Modifier.testTag("edit_receipt_template_btn")
+                            ) {
+                                Icon(Icons.Filled.Edit, contentDescription = "Edit Template", modifier = Modifier.size(14.dp))
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text("Edit Template", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                            }
+                        }
                     }
                 }
             }
 
             // 4. Authentic Digital Thermal Receipt Card
+            val rHeader = branch?.receiptHeader ?: "TR COFFEE • ${sale.branchName}"
+            val rSubtitle = branch?.receiptSubtitle ?: "Official Sales Receipt & Tax Invoice"
+            val rAddress = branch?.address?.ifBlank { null } ?: "123 Norodom Blvd • Daun Penh, Phnom Penh"
+            val rPhone = branch?.phone?.ifBlank { null } ?: "+855 23 888 999"
+            val rVatTin = branch?.receiptVatTin?.ifBlank { null } ?: "VAT TIN: K001-90213847"
+            val rFooter = branch?.receiptFooter?.ifBlank { null } ?: "Thank you for shopping with us! • សូមអរគុណ!"
+            val receiptGap = (branch?.receiptGap ?: sale.receiptGap).coerceIn(4, 40)
+
             Surface(
                 shape = RoundedCornerShape(16.dp),
                 color = Color(0xFFFFFBEB), // Warm thermal paper tint
@@ -495,30 +523,51 @@ fun DigitalReceiptScreen(
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    // Store Header
+                    // Store Header with TR Coffee Logo
+                    Surface(
+                        modifier = Modifier
+                            .size(54.dp)
+                            .clip(CircleShape),
+                        color = Color.White,
+                        border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF0F4D2A))
+                    ) {
+                        Image(
+                            painter = painterResource(id = R.drawable.img_tr_coffee_logo),
+                            contentDescription = "TR Coffee Logo",
+                            modifier = Modifier.fillMaxSize()
+                        )
+                    }
                     Text(
-                        text = "RETAIL POS STORE",
+                        text = rHeader,
                         fontWeight = FontWeight.ExtraBold,
-                        fontSize = 18.sp,
+                        fontSize = 16.sp,
                         fontFamily = FontFamily.Monospace,
-                        letterSpacing = 1.5.sp,
-                        color = RetailSlate900
+                        letterSpacing = 1.sp,
+                        color = Color(0xFF0F4D2A),
+                        textAlign = TextAlign.Center
                     )
                     Text(
-                        text = "123 Norodom Blvd • Daun Penh, Phnom Penh",
+                        text = rSubtitle,
                         fontSize = 11.sp,
                         fontFamily = FontFamily.Monospace,
                         color = RetailSlate500,
                         textAlign = TextAlign.Center
                     )
                     Text(
-                        text = "Tel: +855 23 888 999 • VAT TIN: K001-90213847",
+                        text = "$rAddress • Tel: $rPhone",
+                        fontSize = 10.5.sp,
+                        fontFamily = FontFamily.Monospace,
+                        color = RetailSlate500,
+                        textAlign = TextAlign.Center
+                    )
+                    Text(
+                        text = rVatTin,
                         fontSize = 10.sp,
                         fontFamily = FontFamily.Monospace,
                         color = RetailSlate500
                     )
 
-                    Spacer(modifier = Modifier.height(2.dp))
+                    Spacer(modifier = Modifier.height((receiptGap / 4).coerceAtLeast(2).dp))
 
                     // Transaction Metadata Pill
                     Row(
@@ -536,9 +585,9 @@ fun DigitalReceiptScreen(
                             color = RetailSlate900
                         )
                         Text(
-                            text = "TERM #01",
+                            text = "BRANCH: ${sale.branchName}",
                             fontWeight = FontWeight.Bold,
-                            fontSize = 11.sp,
+                            fontSize = 10.sp,
                             fontFamily = FontFamily.Monospace,
                             color = RetailSlate700
                         )
@@ -585,36 +634,49 @@ fun DigitalReceiptScreen(
                         }
 
                         items.forEach { item ->
-                            Column(modifier = Modifier.fillMaxWidth()) {
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.SpaceBetween,
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                ProductThumbnail(
+                                    imageUrl = item.imageUrl,
+                                    productName = item.productName,
+                                    category = "General",
+                                    modifier = Modifier.size(34.dp),
+                                    shape = RoundedCornerShape(6.dp)
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Text(
+                                            text = "${item.quantity}x ${item.productName}",
+                                            fontSize = 12.sp,
+                                            fontFamily = FontFamily.Monospace,
+                                            fontWeight = FontWeight.SemiBold,
+                                            color = RetailSlate900,
+                                            modifier = Modifier.weight(1f),
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
+                                        Text(
+                                            text = formatPriceByMode(item.itemTotal),
+                                            fontSize = 12.sp,
+                                            fontFamily = FontFamily.Monospace,
+                                            fontWeight = FontWeight.Bold,
+                                            color = RetailSlate900
+                                        )
+                                    }
                                     Text(
-                                        text = "${item.quantity}x ${item.productName}",
-                                        fontSize = 12.sp,
+                                        text = "SKU: ${item.sku} @ ${formatPriceByMode(item.unitPrice)} each",
+                                        fontSize = 10.sp,
                                         fontFamily = FontFamily.Monospace,
-                                        fontWeight = FontWeight.SemiBold,
-                                        color = RetailSlate900,
-                                        modifier = Modifier.weight(1f),
-                                        maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis
-                                    )
-                                    Text(
-                                        text = formatPriceByMode(item.itemTotal),
-                                        fontSize = 12.sp,
-                                        fontFamily = FontFamily.Monospace,
-                                        fontWeight = FontWeight.Bold,
-                                        color = RetailSlate900
+                                        color = RetailSlate500
                                     )
                                 }
-                                Text(
-                                    text = "  SKU: ${item.sku} @ ${formatPriceByMode(item.unitPrice)} each",
-                                    fontSize = 10.sp,
-                                    fontFamily = FontFamily.Monospace,
-                                    color = RetailSlate500
-                                )
                             }
                         }
                     }
@@ -650,15 +712,19 @@ fun DigitalReceiptScreen(
                             }
                         }
 
-                        val taxPercent = if (sale.subtotal - sale.discountAmount > 0) {
-                            ((sale.taxAmount / (sale.subtotal - sale.discountAmount)) * 100 + 0.5).toInt()
-                        } else 8
+                        val displayTaxPercent = if (sale.taxPercent > 0.0) {
+                            String.format(Locale.US, "%.1f", sale.taxPercent).removeSuffix(".0")
+                        } else if (branch != null && branch.taxPercent > 0.0) {
+                            String.format(Locale.US, "%.1f", branch.taxPercent).removeSuffix(".0")
+                        } else if (sale.subtotal - sale.discountAmount > 0) {
+                            String.format(Locale.US, "%.1f", ((sale.taxAmount / (sale.subtotal - sale.discountAmount)) * 100)).removeSuffix(".0")
+                        } else "8"
 
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.SpaceBetween
                         ) {
-                            Text("SALES TAX ($taxPercent%)", fontSize = 11.sp, fontFamily = FontFamily.Monospace, color = RetailSlate700)
+                            Text("SALES TAX ($displayTaxPercent%)", fontSize = 11.sp, fontFamily = FontFamily.Monospace, color = RetailSlate700)
                             Text(formatPriceByMode(sale.taxAmount), fontSize = 11.sp, fontFamily = FontFamily.Monospace, color = RetailSlate900)
                         }
 
@@ -844,7 +910,7 @@ fun DigitalReceiptScreen(
                     }
 
                     Text(
-                        text = "Thank you for shopping with us! • សូមអរគុណ!",
+                        text = rFooter,
                         fontSize = 11.sp,
                         fontFamily = FontFamily.Monospace,
                         fontWeight = FontWeight.Bold,

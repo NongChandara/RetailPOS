@@ -142,7 +142,7 @@ class DigitalReceiptScreenTest {
         composeTestRule.onNodeWithTag("receipt_currency_chip_usd").assertExists()
 
         // Verify bottom bar actions
-        composeTestRule.onNodeWithTag("print_pdf_receipt_button").assertIsDisplayed()
+        composeTestRule.onNodeWithTag("print_receipt_button").assertIsDisplayed()
         composeTestRule.onNodeWithTag("receipt_done_button").assertIsDisplayed()
 
         // Switch to KHR currency mode

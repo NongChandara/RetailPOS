@@ -6,7 +6,8 @@ import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
 import androidx.room.Update
-import com.example.data.model.ProductEntity
+import com.example.data.model.BranchEntity
+import com.example.data.model.CategoryEntity
 import com.example.data.model.SaleEntity
 import com.example.data.model.SaleItemEntity
 import com.example.data.model.StockMovementEntity
@@ -14,45 +15,69 @@ import com.example.data.model.UserEntity
 import kotlinx.coroutines.flow.Flow
 
 @Dao
-interface ProductDao {
-    @Query("SELECT * FROM products ORDER BY name ASC")
-    fun getAllProducts(): Flow<List<ProductEntity>>
+interface CategoryDao {
+    @Query("SELECT * FROM categories ORDER BY name ASC")
+    fun getAllCategories(): Flow<List<CategoryEntity>>
 
-    @Query("SELECT * FROM products WHERE stockQuantity <= minStockThreshold ORDER BY stockQuantity ASC")
-    fun getLowStockProducts(): Flow<List<ProductEntity>>
+    @Query("SELECT * FROM categories WHERE id = :id LIMIT 1")
+    suspend fun getCategoryById(id: Long): CategoryEntity?
 
-    @Query("SELECT * FROM products WHERE id = :id LIMIT 1")
-    suspend fun getProductById(id: Long): ProductEntity?
-
-    @Query("SELECT * FROM products WHERE sku = :sku OR barcode = :sku LIMIT 1")
-    suspend fun getProductBySku(sku: String): ProductEntity?
-
-    @Query("SELECT * FROM products WHERE name LIKE '%' || :query || '%' OR sku LIKE '%' || :query || '%' OR category LIKE '%' || :query || '%' ORDER BY name ASC")
-    fun searchProducts(query: String): Flow<List<ProductEntity>>
+    @Query("SELECT * FROM categories WHERE name = :name LIMIT 1")
+    suspend fun getCategoryByName(name: String): CategoryEntity?
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
-    suspend fun insertProduct(product: ProductEntity): Long
+    suspend fun insertCategory(category: CategoryEntity): Long
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
-    suspend fun insertProducts(products: List<ProductEntity>)
+    suspend fun insertCategories(categories: List<CategoryEntity>)
 
     @Update
-    suspend fun updateProduct(product: ProductEntity)
-
-    @Query("UPDATE products SET stockQuantity = :newStock, updatedAt = :updatedAt WHERE id = :id")
-    suspend fun updateStock(id: Long, newStock: Int, updatedAt: Long = System.currentTimeMillis())
+    suspend fun updateCategory(category: CategoryEntity)
 
     @Delete
-    suspend fun deleteProduct(product: ProductEntity)
+    suspend fun deleteCategory(category: CategoryEntity)
 
-    @Query("SELECT * FROM products WHERE category = :category ORDER BY name ASC")
-    fun getProductsByCategory(category: String): Flow<List<ProductEntity>>
+    @Query("DELETE FROM categories WHERE id = :id")
+    suspend fun deleteCategoryById(id: Long)
 
-    @Query("SELECT DISTINCT category FROM products ORDER BY category ASC")
-    fun getAllCategories(): Flow<List<String>>
+    @Query("DELETE FROM categories WHERE name = :name")
+    suspend fun deleteCategoryByName(name: String)
 
-    @Query("SELECT COUNT(*) FROM products")
-    suspend fun countProducts(): Int
+    @Query("SELECT COUNT(*) FROM categories")
+    suspend fun countCategories(): Int
+}
+
+@Dao
+interface BranchDao {
+    @Query("SELECT * FROM branches ORDER BY isMain DESC, name ASC")
+    fun getAllBranches(): Flow<List<BranchEntity>>
+
+    @Query("SELECT * FROM branches WHERE id = :id LIMIT 1")
+    suspend fun getBranchById(id: Long): BranchEntity?
+
+    @Query("SELECT * FROM branches WHERE name = :name LIMIT 1")
+    suspend fun getBranchByName(name: String): BranchEntity?
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertBranch(branch: BranchEntity): Long
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertBranches(branches: List<BranchEntity>)
+
+    @Update
+    suspend fun updateBranch(branch: BranchEntity)
+
+    @Delete
+    suspend fun deleteBranch(branch: BranchEntity)
+
+    @Query("DELETE FROM branches WHERE id = :id")
+    suspend fun deleteBranchById(id: Long)
+
+    @Query("DELETE FROM branches WHERE name = :name")
+    suspend fun deleteBranchByName(name: String)
+
+    @Query("SELECT COUNT(*) FROM branches")
+    suspend fun countBranches(): Int
 }
 
 @Dao

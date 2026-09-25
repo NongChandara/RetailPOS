@@ -133,4 +133,44 @@ class ProductRoomDatabaseTest {
         val afterDeletion = productDao.getProductById(id)
         assertNull("Product should be null after deletion", afterDeletion)
     }
+
+    @Test
+    fun testStockAdjustmentAndInventoryThresholds() = runBlocking {
+        val product = ProductEntity(
+            name = "Matcha Powder 100g",
+            sku = "TEA-MAT-100",
+            category = "Beverages",
+            costPrice = 8.00,
+            sellingPrice = 16.00,
+            stockQuantity = 6,
+            minStockThreshold = 5,
+            barcode = "885123456789"
+        )
+        val id = productDao.insertProduct(product)
+
+        // Currently 6 items in stock (above minStockThreshold of 5)
+        val lowStockInitial = productDao.getLowStockProducts().first()
+        assertTrue(lowStockInitial.none { it.id == id })
+
+        // Adjust stock down by 2 (resulting in 4, which is <= 5)
+        productDao.adjustStock(id, -2)
+        val lowStockAfter = productDao.getLowStockProducts().first()
+        assertTrue("Product should be in low stock list when quantity <= threshold", lowStockAfter.any { it.id == id })
+        val updatedProd = productDao.getProductById(id)
+        assertEquals(4, updatedProd?.stockQuantity)
+
+        // Lookup by barcode
+        val byBarcode = productDao.getProductByBarcode("885123456789")
+        assertNotNull("Should find product by barcode", byBarcode)
+        assertEquals(id, byBarcode?.id)
+
+        // Adjust down to 0
+        productDao.adjustStock(id, -10) // MAX(0, stockQuantity - 10) ensures non-negative
+        val outOfStockList = productDao.getOutOfStockProducts().first()
+        assertTrue("Product should be in out-of-stock list", outOfStockList.any { it.id == id })
+
+        // Delete by ID
+        productDao.deleteProductById(id)
+        assertNull(productDao.getProductById(id))
+    }
 }
