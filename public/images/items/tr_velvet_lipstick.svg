@@ -1,0 +1,53 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 400" width="100%" height="100%">
+  <defs>
+    <linearGradient id="bgLip" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#2a0815"/>
+      <stop offset="100%" stop-color="#0e0207"/>
+    </linearGradient>
+    <linearGradient id="goldCase" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#b45309"/>
+      <stop offset="35%" stop-color="#fde047"/>
+      <stop offset="65%" stop-color="#f59e0b"/>
+      <stop offset="100%" stop-color="#78350f"/>
+    </linearGradient>
+    <linearGradient id="lipColor" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#881337"/>
+      <stop offset="40%" stop-color="#e11d48"/>
+      <stop offset="70%" stop-color="#be123c"/>
+      <stop offset="100%" stop-color="#4c0519"/>
+    </linearGradient>
+  </defs>
+
+  <rect width="400" height="400" rx="32" fill="url(#bgLip)"/>
+  <circle cx="200" cy="200" r="160" fill="none" stroke="#f43f5e" stroke-opacity="0.12" stroke-width="1.5"/>
+
+  <!-- Shadow -->
+  <ellipse cx="200" cy="345" rx="50" ry="14" fill="#000000" opacity="0.7"/>
+
+  <!-- Base Tube (Lower Case) -->
+  <rect x="165" y="220" width="70" height="115" rx="8" fill="#18181b" stroke="#27272a" stroke-width="1"/>
+  <rect x="165" y="220" width="70" height="10" fill="url(#goldCase)"/>
+  <text x="200" y="280" fill="url(#goldCase)" font-family="system-ui, sans-serif" font-size="9" font-weight="900" text-anchor="middle" letter-spacing="2">TR ROSE</text>
+
+  <!-- Inner Gold Swivel Mechanism -->
+  <rect x="172" y="160" width="56" height="60" rx="4" fill="url(#goldCase)"/>
+
+  <!-- Lipstick Bullet (Beveled Tip) -->
+  <path d="M178 160 L178 105 C178 75, 205 60, 222 60 L222 160 Z" fill="url(#lipColor)"/>
+
+  <!-- Lipstick Slanted Top Reflection -->
+  <path d="M182 105 C185 85, 205 72, 218 68 L218 85 Z" fill="#fda4af" opacity="0.6"/>
+
+  <!-- Color Swatch Brush Stroke in background -->
+  <path d="M110 300 C150 280, 250 280, 290 300" stroke="#be123c" stroke-width="14" stroke-linecap="round" opacity="0.7"/>
+
+  <!-- Sparkles -->
+  <polygon points="130,120 133,125 138,126 133,128 130,133 128,128 123,126 128,125" fill="#fda4af"/>
+  <polygon points="270,100 272,104 276,105 272,107 270,111 268,107 264,105 268,104" fill="#fde047"/>
+
+  <!-- Label Badge -->
+  <g transform="translate(200, 368)">
+    <rect x="-85" y="-14" width="170" height="26" rx="13" fill="#be123c" stroke="#fda4af" stroke-width="1"/>
+    <text x="0" y="3" fill="#ffffff" font-family="system-ui, sans-serif" font-size="11" font-weight="900" text-anchor="middle" letter-spacing="1">VELVET MATTE LIPSTICK</text>
+  </g>
+</svg>

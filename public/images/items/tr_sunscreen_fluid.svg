@@ -1,0 +1,53 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 400" width="100%" height="100%">
+  <defs>
+    <linearGradient id="bgSun" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#1e293b"/>
+      <stop offset="50%" stop-color="#0f172a"/>
+      <stop offset="100%" stop-color="#020617"/>
+    </linearGradient>
+    <linearGradient id="tubeGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#f8fafc"/>
+      <stop offset="40%" stop-color="#ffffff"/>
+      <stop offset="70%" stop-color="#fef08a"/>
+      <stop offset="100%" stop-color="#fde047"/>
+    </linearGradient>
+  </defs>
+
+  <rect width="400" height="400" rx="32" fill="url(#bgSun)"/>
+  <circle cx="200" cy="200" r="160" fill="none" stroke="#facc15" stroke-opacity="0.1" stroke-width="1.5"/>
+
+  <!-- Shadow -->
+  <ellipse cx="200" cy="345" rx="55" ry="14" fill="#000000" opacity="0.65"/>
+
+  <!-- Sun Rays background burst -->
+  <g transform="translate(200, 160)" opacity="0.18">
+    <circle cx="0" cy="0" r="90" fill="#facc15"/>
+  </g>
+
+  <!-- Sunscreen Oval Squeeze Bottle -->
+  <path d="M150 160 C150 120, 250 120, 250 160 L250 300 C250 330, 150 330, 150 300 Z" fill="url(#tubeGrad)"/>
+
+  <!-- Cap on Top -->
+  <rect x="175" y="80" width="50" height="40" rx="8" fill="#f8fafc" stroke="#e2e8f0" stroke-width="2"/>
+  <ellipse cx="200" cy="80" rx="25" ry="8" fill="#ffffff"/>
+
+  <!-- Sun Icon on Bottle -->
+  <g transform="translate(200, 195)">
+    <circle cx="0" cy="0" r="18" fill="#eab308"/>
+    <path d="M0 -28 L0 -22 M0 28 L0 22 M-28 0 L-22 0 M28 0 L22 0 M-20 -20 L-15 -15 M20 20 L15 15 M-20 20 L-15 15 M20 -20 L15 -15" stroke="#eab308" stroke-width="3" stroke-linecap="round"/>
+  </g>
+
+  <!-- Bottle Text -->
+  <text x="200" y="240" fill="#0f172a" font-family="system-ui, sans-serif" font-size="12" font-weight="900" text-anchor="middle">ULTRA SHIELD</text>
+  <text x="200" y="258" fill="#d97706" font-family="system-ui, sans-serif" font-size="13" font-weight="900" text-anchor="middle">SPF 50+ PA++++</text>
+  <text x="200" y="278" fill="#475569" font-family="system-ui, sans-serif" font-size="8" font-weight="700" text-anchor="middle">WATER FLUID • 50ML</text>
+
+  <!-- Highlight stroke -->
+  <path d="M156 160 L156 300" stroke="#ffffff" stroke-width="4" stroke-linecap="round" opacity="0.6"/>
+
+  <!-- Label Badge -->
+  <g transform="translate(200, 368)">
+    <rect x="-85" y="-14" width="170" height="26" rx="13" fill="#ca8a04" stroke="#fef08a" stroke-width="1"/>
+    <text x="0" y="3" fill="#ffffff" font-family="system-ui, sans-serif" font-size="11" font-weight="900" text-anchor="middle" letter-spacing="1">SPF 50+ SUNSCREEN</text>
+  </g>
+</svg>

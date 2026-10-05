@@ -17,6 +17,12 @@ import com.example.data.model.UserEntity
 import com.example.data.repository.RetailRepository
 import com.example.service.LowStockMonitoringService
 import com.example.service.LowStockNotificationHelper
+import com.example.ui.reports.CategorySalesPerformance
+import com.example.ui.reports.HourlySalesData
+import com.example.ui.reports.ProductSalesPerformance
+import com.example.ui.reports.ReportPeriod
+import com.example.ui.reports.SalesReportSummary
+import com.example.ui.reports.StaffSalesPerformance
 import com.example.util.CurrencyMode
 import com.example.util.CurrencyUtils
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -28,15 +34,43 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
+import java.util.Calendar
 import java.util.Date
 import java.util.Locale
 import kotlin.random.Random
 
 data class CartItem(
     val product: ProductEntity,
-    val quantity: Int
+    val quantity: Int,
+    val discountPercent: Double = 0.0,
+    val customUnitPrice: Double? = null,
+    val isBuy10Get1Free: Boolean = false,
+    val freeQuantity: Int = 0
 ) {
-    val subtotal: Double get() = product.sellingPrice * quantity
+    val unitPrice: Double get() = customUnitPrice ?: product.sellingPrice
+    val grossSubtotal: Double get() = unitPrice * quantity
+    
+    // Free items to client:
+    // If cashier typed a specific number of free items (freeQuantity > 0), use that number (capped at quantity).
+    // Otherwise if isBuy10Get1Free is active, calculate B10G1 automatically.
+    val freeItemsCount: Int get() = if (freeQuantity > 0) {
+        freeQuantity.coerceAtMost(quantity)
+    } else if (isBuy10Get1Free) {
+        if (quantity >= 11) quantity / 11 else if (quantity >= 10) 1 else 0
+    } else 0
+
+    val freeDiscountAmount: Double get() = freeItemsCount * unitPrice
+    val b10g1DiscountAmount: Double get() = freeDiscountAmount
+
+    val itemDiscountAmount: Double get() {
+        return if (freeItemsCount > 0) {
+            freeDiscountAmount
+        } else {
+            grossSubtotal * (discountPercent / 100.0)
+        }
+    }
+
+    val subtotal: Double get() = (grossSubtotal - itemDiscountAmount).coerceAtLeast(0.0)
 }
 
 data class ScanResult(
@@ -52,11 +86,14 @@ enum class StockFilter {
 class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val database = AppDatabase.getDatabase(application, viewModelScope)
     private val repository = RetailRepository(database)
+    private val telegramNotificationService = com.example.service.TelegramNotificationService(application)
+    val telegramConfig: StateFlow<com.example.service.TelegramConfig> = telegramNotificationService.config
 
     init {
-        // Ensure initial seed data is loaded on first launch
+        // Ensure initial seed data and catalog synchronization are loaded on launch
         viewModelScope.launch {
             AppDatabase.populateInitialData(database)
+            AppDatabase.syncStandardStoreData(database)
         }
         // Initialize background low-stock monitoring
         LowStockMonitoringService.schedulePeriodicMonitoring(
@@ -85,6 +122,21 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             CurrencyUtils.activeKhrExchangeRate = rate
             _toastMessage.value = "Exchange rate set: $1 USD = ${CurrencyUtils.formatKhrRaw(rate.toLong())}"
         }
+    }
+
+    // Bakong Universal KHQR State
+    private val _bakongAccountId = MutableStateFlow("trstore@aclb")
+    val bakongAccountId: StateFlow<String> = _bakongAccountId.asStateFlow()
+
+    private val _bakongMerchantName = MutableStateFlow("TR STORE & CAFE")
+    val bakongMerchantName: StateFlow<String> = _bakongMerchantName.asStateFlow()
+
+    fun updateBakongSettings(accountId: String, merchantName: String) {
+        val cleanAcc = accountId.trim().ifBlank { "trstore@aclb" }
+        val cleanName = merchantName.trim().ifBlank { "TR STORE & CAFE" }
+        _bakongAccountId.value = cleanAcc
+        _bakongMerchantName.value = cleanName
+        _toastMessage.value = "Bakong KHQR configured: $cleanAcc ($cleanName)"
     }
 
     fun formatPrice(amountInUsd: Double, compact: Boolean = false): String {
@@ -169,6 +221,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     val allSales: StateFlow<List<SaleEntity>> = repository.allSales
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
+    val allSaleItems: StateFlow<List<SaleItemEntity>> = repository.allSaleItems
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
     val allMovements: StateFlow<List<StockMovementEntity>> = repository.allMovements
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
@@ -190,7 +245,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         categories.forEach { if (it.name.isNotBlank()) set.add(it.name) }
         products.forEach { if (it.category.isNotBlank()) set.add(it.category) }
         if (set.isEmpty()) {
-            listOf("Beverages", "Bakery", "Snacks", "Electronics", "Home & Goods", "Personal Care", "Apparel")
+            listOf("Coffee & Beverages", "Bakery", "Cosmetics", "Salon & Services", "Gift Sets & Merch")
         } else {
             set.toList()
         }
@@ -274,6 +329,349 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     }
                 }
             }
+        }
+    }
+
+    // Admin Sales Reporting Controls & States
+    private val _reportPeriod = MutableStateFlow(ReportPeriod.TODAY)
+    val reportPeriod: StateFlow<ReportPeriod> = _reportPeriod.asStateFlow()
+
+    private val _reportCashierFilter = MutableStateFlow("ALL")
+    val reportCashierFilter: StateFlow<String> = _reportCashierFilter.asStateFlow()
+
+    private val _reportBranchFilter = MutableStateFlow("ALL")
+    val reportBranchFilter: StateFlow<String> = _reportBranchFilter.asStateFlow()
+
+    private val _reportPaymentFilter = MutableStateFlow("ALL")
+    val reportPaymentFilter: StateFlow<String> = _reportPaymentFilter.asStateFlow()
+
+    fun setReportPeriod(period: ReportPeriod) {
+        _reportPeriod.value = period
+    }
+
+    fun setReportCashierFilter(cashierName: String) {
+        _reportCashierFilter.value = cashierName
+    }
+
+    fun setReportBranchFilter(branch: String) {
+        _reportBranchFilter.value = branch
+    }
+
+    fun setReportPaymentFilter(method: String) {
+        _reportPaymentFilter.value = method
+    }
+
+    private data class ReportFilterParams(
+        val period: ReportPeriod,
+        val cashier: String,
+        val branch: String,
+        val payment: String
+    )
+
+    private val _reportFilterState = combine(
+        _reportPeriod,
+        _reportCashierFilter,
+        _reportBranchFilter,
+        _reportPaymentFilter
+    ) { period, cashier, branch, payment ->
+        ReportFilterParams(period, cashier, branch, payment)
+    }
+
+    val salesReportSummary: StateFlow<SalesReportSummary> = combine(
+        allSales,
+        allSaleItems,
+        allProducts,
+        allUsers,
+        _reportFilterState
+    ) { sales, saleItems, products, users, filter ->
+        computeSalesReportSummary(sales, saleItems, products, users, filter)
+    }.stateIn(
+        viewModelScope,
+        SharingStarted.WhileSubscribed(5000),
+        computeEmptySalesReportSummary()
+    )
+
+    private fun computeEmptySalesReportSummary(): SalesReportSummary {
+        return SalesReportSummary(
+            period = ReportPeriod.TODAY,
+            periodLabel = "Today",
+            dateRangeDisplay = SimpleDateFormat("MMM dd, yyyy", Locale.US).format(Date()),
+            filteredSales = emptyList(),
+            filteredSaleItems = emptyList(),
+            totalGrossRevenue = 0.0,
+            totalCogs = 0.0,
+            grossProfit = 0.0,
+            profitMarginPercent = 0.0,
+            transactionsCount = 0,
+            averageTicket = 0.0,
+            totalItemsSold = 0,
+            totalDiscounts = 0.0,
+            totalTax = 0.0,
+            cashTotal = 0.0,
+            cashCount = 0,
+            cardTotal = 0.0,
+            cardCount = 0,
+            digitalTotal = 0.0,
+            digitalCount = 0,
+            staffPerformance = emptyList(),
+            topProducts = emptyList(),
+            categorySales = emptyList(),
+            hourlySales = emptyList()
+        )
+    }
+
+    private fun computeSalesReportSummary(
+        sales: List<SaleEntity>,
+        saleItems: List<SaleItemEntity>,
+        products: List<ProductEntity>,
+        users: List<UserEntity>,
+        filter: ReportFilterParams
+    ): SalesReportSummary {
+        val cal = Calendar.getInstance()
+        val now = System.currentTimeMillis()
+        cal.timeInMillis = now
+        cal.set(Calendar.HOUR_OF_DAY, 0)
+        cal.set(Calendar.MINUTE, 0)
+        cal.set(Calendar.SECOND, 0)
+        cal.set(Calendar.MILLISECOND, 0)
+        val startOfToday = cal.timeInMillis
+        val endOfToday = startOfToday + 24L * 60 * 60 * 1000 - 1
+
+        val (minTimestamp, maxTimestamp, dateRangeDisplay) = when (filter.period) {
+            ReportPeriod.TODAY -> {
+                val dateFormat = SimpleDateFormat("MMM dd, yyyy", Locale.US)
+                Triple(startOfToday, Long.MAX_VALUE, dateFormat.format(Date(now)))
+            }
+            ReportPeriod.YESTERDAY -> {
+                val startOfYesterday = startOfToday - 24L * 60 * 60 * 1000
+                val endOfYesterday = startOfToday - 1
+                val dateFormat = SimpleDateFormat("MMM dd, yyyy", Locale.US)
+                Triple(startOfYesterday, endOfYesterday, dateFormat.format(Date(startOfYesterday)))
+            }
+            ReportPeriod.WEEK -> {
+                val startOfWeek = startOfToday - 6L * 24 * 60 * 60 * 1000
+                val dateFormat = SimpleDateFormat("MMM dd", Locale.US)
+                Triple(startOfWeek, Long.MAX_VALUE, "${dateFormat.format(Date(startOfWeek))} - ${dateFormat.format(Date(now))}")
+            }
+            ReportPeriod.MONTH -> {
+                val startOfMonth = startOfToday - 29L * 24 * 60 * 60 * 1000
+                val dateFormat = SimpleDateFormat("MMM dd", Locale.US)
+                Triple(startOfMonth, Long.MAX_VALUE, "${dateFormat.format(Date(startOfMonth))} - ${dateFormat.format(Date(now))}")
+            }
+            ReportPeriod.ALL -> {
+                Triple(0L, Long.MAX_VALUE, "Complete Store History")
+            }
+        }
+
+        val filteredSales = sales.filter { sale ->
+            val inTime = sale.timestamp in minTimestamp..maxTimestamp
+            val matchesCashier = filter.cashier == "ALL" || sale.cashierName.equals(filter.cashier, ignoreCase = true)
+            val matchesBranch = filter.branch == "ALL" || sale.branchName.equals(filter.branch, ignoreCase = true)
+            val matchesPayment = filter.payment == "ALL" || sale.paymentMethod.equals(filter.payment, ignoreCase = true)
+            inTime && matchesCashier && matchesBranch && matchesPayment
+        }
+
+        val filteredSaleIds = filteredSales.map { it.id }.toSet()
+        val filteredSaleItems = saleItems.filter { it.saleId in filteredSaleIds }
+
+        val totalGrossRevenue = filteredSales.sumOf { it.totalAmount }
+        val totalDiscounts = filteredSales.sumOf { it.discountAmount }
+        val totalTax = filteredSales.sumOf { it.taxAmount }
+        val transactionsCount = filteredSales.size
+        val averageTicket = if (transactionsCount > 0) totalGrossRevenue / transactionsCount else 0.0
+        val totalItemsSold = if (filteredSaleItems.isNotEmpty()) {
+            filteredSaleItems.sumOf { it.quantity }
+        } else {
+            filteredSales.sumOf { it.itemsCount }
+        }
+
+        val prodCostMap = products.associate { it.id to it.costPrice }
+        var totalCogs = filteredSaleItems.sumOf { it.costPrice * it.quantity }
+        if (totalCogs <= 0.0 && totalGrossRevenue > 0.0) {
+            totalCogs = filteredSaleItems.sumOf { (prodCostMap[it.productId] ?: (it.unitPrice * 0.45)) * it.quantity }
+            if (totalCogs <= 0.0) {
+                totalCogs = totalGrossRevenue * 0.45
+            }
+        }
+        val grossProfit = (totalGrossRevenue - totalCogs).coerceAtLeast(0.0)
+        val profitMarginPercent = if (totalGrossRevenue > 0.0) (grossProfit / totalGrossRevenue) * 100.0 else 0.0
+
+        val cashSales = filteredSales.filter { it.paymentMethod.equals("CASH", ignoreCase = true) }
+        val cardSales = filteredSales.filter { it.paymentMethod.equals("CARD", ignoreCase = true) }
+        val digitalSales = filteredSales.filter {
+            it.paymentMethod.equals("DIGITAL", ignoreCase = true) || it.paymentMethod.contains("KHQR", ignoreCase = true)
+        }
+
+        val cashTotal = cashSales.sumOf { it.totalAmount }
+        val cashCount = cashSales.size
+
+        val cardTotal = cardSales.sumOf { it.totalAmount }
+        val cardCount = cardSales.size
+
+        val digitalTotal = digitalSales.sumOf { it.totalAmount }
+        val digitalCount = digitalSales.size
+
+        val staffMap = users.associateBy { it.name.lowercase() }
+        val staffPerformance = filteredSales.groupBy { it.cashierName }.map { (name, cashierSales) ->
+            val userRole = staffMap[name.lowercase()]?.role ?: if (cashierSales.firstOrNull()?.cashierId == 1L) "ADMIN" else "Staff"
+            val count = cashierSales.size
+            val revenue = cashierSales.sumOf { it.totalAmount }
+            val avg = if (count > 0) revenue / count else 0.0
+            val pct = if (totalGrossRevenue > 0.0) (revenue / totalGrossRevenue) * 100.0 else 0.0
+            StaffSalesPerformance(
+                cashierId = cashierSales.firstOrNull()?.cashierId ?: 0L,
+                cashierName = name,
+                role = userRole,
+                transactionsCount = count,
+                totalRevenue = revenue,
+                averageTicket = avg,
+                percentageOfTotal = pct
+            )
+        }.sortedByDescending { it.totalRevenue }
+
+        val topProducts = filteredSaleItems.groupBy { it.productName }.map { (pName, items) ->
+            val first = items.first()
+            val qty = items.sumOf { it.quantity }
+            val rev = items.sumOf { it.itemTotal }
+            val unitPrice = if (qty > 0) rev / qty else first.unitPrice
+            ProductSalesPerformance(
+                productId = first.productId,
+                productName = pName,
+                sku = first.sku,
+                quantitySold = qty,
+                totalRevenue = rev,
+                unitPrice = unitPrice
+            )
+        }.sortedByDescending { it.quantitySold }.take(10)
+
+        val productCategoryMap = products.associate { it.name.lowercase() to it.category }
+        val categorySales = filteredSaleItems.groupBy { item ->
+            productCategoryMap[item.productName.lowercase()] ?: "General"
+        }.map { (catName, items) ->
+            val qty = items.sumOf { it.quantity }
+            val rev = items.sumOf { it.itemTotal }
+            val pct = if (totalGrossRevenue > 0.0) (rev / totalGrossRevenue) * 100.0 else 0.0
+            CategorySalesPerformance(
+                categoryName = catName,
+                quantitySold = qty,
+                totalRevenue = rev,
+                percentageOfTotal = pct
+            )
+        }.sortedByDescending { it.totalRevenue }
+
+        val hourFormat = SimpleDateFormat("ha", Locale.US)
+        val hourlySales = (8..21).map { h ->
+            val matching = filteredSales.filter { sale ->
+                val hourCal = Calendar.getInstance().apply { timeInMillis = sale.timestamp }
+                hourCal.get(Calendar.HOUR_OF_DAY) == h
+            }
+            val hCal = Calendar.getInstance().apply { set(Calendar.HOUR_OF_DAY, h); set(Calendar.MINUTE, 0) }
+            HourlySalesData(
+                hourLabel = hourFormat.format(hCal.time),
+                orderCount = matching.size,
+                totalRevenue = matching.sumOf { it.totalAmount }
+            )
+        }
+
+        return SalesReportSummary(
+            period = filter.period,
+            periodLabel = filter.period.label,
+            dateRangeDisplay = dateRangeDisplay,
+            filteredSales = filteredSales,
+            filteredSaleItems = filteredSaleItems,
+            totalGrossRevenue = totalGrossRevenue,
+            totalCogs = totalCogs,
+            grossProfit = grossProfit,
+            profitMarginPercent = profitMarginPercent,
+            transactionsCount = transactionsCount,
+            averageTicket = averageTicket,
+            totalItemsSold = totalItemsSold,
+            totalDiscounts = totalDiscounts,
+            totalTax = totalTax,
+            cashTotal = cashTotal,
+            cashCount = cashCount,
+            cardTotal = cardTotal,
+            cardCount = cardCount,
+            digitalTotal = digitalTotal,
+            digitalCount = digitalCount,
+            staffPerformance = staffPerformance,
+            topProducts = topProducts,
+            categorySales = categorySales,
+            hourlySales = hourlySales
+        )
+    }
+
+    fun generateSalesReportText(summary: SalesReportSummary): String {
+        val branchName = if (_reportBranchFilter.value == "ALL") "All Branches" else _reportBranchFilter.value
+        val cashierFilter = if (_reportCashierFilter.value == "ALL") "All Cashiers" else _reportCashierFilter.value
+        val rate = _khrExchangeRate.value
+        val revKhr = CurrencyUtils.formatKhr(summary.totalGrossRevenue, rate)
+        val profitKhr = CurrencyUtils.formatKhr(summary.grossProfit, rate)
+        val cashKhr = CurrencyUtils.formatKhr(summary.cashTotal, rate)
+        val adminName = _currentUser.value?.name ?: "Sarah Miller (Admin)"
+
+        val sb = StringBuilder()
+        sb.appendLine("========================================")
+        sb.appendLine("        TR COFFEE • កាហ្វេ ទីរ៉ូ")
+        sb.appendLine("     EXECUTIVE SALES & AUDIT REPORT")
+        sb.appendLine("========================================")
+        sb.appendLine("Report Period : ${summary.period.label} (${summary.dateRangeDisplay})")
+        sb.appendLine("Generated By  : $adminName")
+        sb.appendLine("Branch        : $branchName")
+        sb.appendLine("Cashier Scope : $cashierFilter")
+        sb.appendLine("Generated At  : ${SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US).format(Date())}")
+        sb.appendLine("----------------------------------------")
+        sb.appendLine("KEY FINANCIAL METRICS:")
+        sb.appendLine("• Gross Revenue : $${String.format(Locale.US, "%.2f", summary.totalGrossRevenue)} / $revKhr")
+        sb.appendLine("• COGS (Cost)   : $${String.format(Locale.US, "%.2f", summary.totalCogs)}")
+        sb.appendLine("• Gross Profit  : $${String.format(Locale.US, "%.2f", summary.grossProfit)} / $profitKhr")
+        sb.appendLine("• Profit Margin : ${String.format(Locale.US, "%.1f", summary.profitMarginPercent)}%")
+        sb.appendLine("• Transactions  : ${summary.transactionsCount} Orders")
+        sb.appendLine("• Average Ticket: $${String.format(Locale.US, "%.2f", summary.averageTicket)} / order")
+        sb.appendLine("• Total Units   : ${summary.totalItemsSold} items")
+        sb.appendLine("• Discounts     : -$${String.format(Locale.US, "%.2f", summary.totalDiscounts)}")
+        sb.appendLine("• Tax Collected : +$${String.format(Locale.US, "%.2f", summary.totalTax)}")
+        sb.appendLine("----------------------------------------")
+        sb.appendLine("DRAWER RECONCILIATION & TENDERS:")
+        sb.appendLine("• Cash in Drawer: $${String.format(Locale.US, "%.2f", summary.cashTotal)} ($cashKhr) • ${summary.cashCount} orders")
+        sb.appendLine("• KHQR / Digital: $${String.format(Locale.US, "%.2f", summary.digitalTotal)} • ${summary.digitalCount} orders")
+        sb.appendLine("• Card / POS    : $${String.format(Locale.US, "%.2f", summary.cardTotal)} • ${summary.cardCount} orders")
+        if (summary.staffPerformance.isNotEmpty()) {
+            sb.appendLine("----------------------------------------")
+            sb.appendLine("STAFF PERFORMANCE RANKING:")
+            summary.staffPerformance.forEachIndexed { idx, staff ->
+                sb.appendLine("${idx + 1}. ${staff.cashierName} (${staff.role}): $${String.format(Locale.US, "%.2f", staff.totalRevenue)} • ${staff.transactionsCount} orders (${String.format(Locale.US, "%.1f", staff.percentageOfTotal)}%)")
+            }
+        }
+        if (summary.topProducts.isNotEmpty()) {
+            sb.appendLine("----------------------------------------")
+            sb.appendLine("TOP SELLING PRODUCTS:")
+            summary.topProducts.take(5).forEachIndexed { idx, prod ->
+                sb.appendLine("${idx + 1}. ${prod.productName} • ${prod.quantitySold} sold ($${String.format(Locale.US, "%.2f", prod.totalRevenue)})")
+            }
+        }
+        sb.appendLine("========================================")
+        sb.appendLine("Official Store Audit • TR Store & Cafe")
+        return sb.toString()
+    }
+
+    fun shareSalesReport(context: android.content.Context, summary: SalesReportSummary) {
+        val reportText = generateSalesReportText(summary)
+        try {
+            val clipboard = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as? android.content.ClipboardManager
+            clipboard?.setPrimaryClip(android.content.ClipData.newPlainText("Sales Report", reportText))
+            val sendIntent = android.content.Intent().apply {
+                action = android.content.Intent.ACTION_SEND
+                putExtra(android.content.Intent.EXTRA_TEXT, reportText)
+                putExtra(android.content.Intent.EXTRA_SUBJECT, "TR Coffee - Sales Report (${summary.period.label})")
+                type = "text/plain"
+            }
+            val chooser = android.content.Intent.createChooser(sendIntent, "Share Sales Report")
+            chooser.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+            context.startActivity(chooser)
+            _toastMessage.value = "Sales report copied & share dialog opened"
+        } catch (e: Exception) {
+            _toastMessage.value = "Sales report copied to clipboard"
         }
     }
 
@@ -371,6 +769,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     // Barcode Scanning Feedback State
     private val _lastScannedResult = MutableStateFlow<ScanResult?>(null)
     val lastScannedResult: StateFlow<ScanResult?> = _lastScannedResult.asStateFlow()
+
+    fun showToast(message: String) {
+        _toastMessage.value = message
+    }
 
     fun clearToastMessage() {
         _toastMessage.value = null
@@ -486,6 +888,24 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         _discountPercent.value = percent
     }
 
+    fun updateItemDiscount(productId: Long, discountPct: Double) {
+        val current = _cart.value.toMutableList()
+        val index = current.indexOfFirst { it.product.id == productId }
+        if (index >= 0) {
+            current[index] = current[index].copy(discountPercent = discountPct.coerceIn(0.0, 100.0))
+            _cart.value = current
+        }
+    }
+
+    fun updateItemCustomPrice(productId: Long, price: Double?) {
+        val current = _cart.value.toMutableList()
+        val index = current.indexOfFirst { it.product.id == productId }
+        if (index >= 0) {
+            current[index] = current[index].copy(customUnitPrice = price)
+            _cart.value = current
+        }
+    }
+
     fun setPosSearchQuery(query: String) {
         _posSearchQuery.value = query
     }
@@ -494,19 +914,110 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         _selectedCategory.value = category
     }
 
+    fun setItemFreeQuantity(productId: Long, freeQty: Int) {
+        val current = _cart.value.toMutableList()
+        val index = current.indexOfFirst { it.product.id == productId }
+        if (index >= 0) {
+            val item = current[index]
+            val safeFree = freeQty.coerceIn(0, item.quantity)
+            current[index] = item.copy(
+                freeQuantity = safeFree,
+                isBuy10Get1Free = safeFree > 0,
+                discountPercent = if (safeFree > 0) 0.0 else item.discountPercent
+            )
+            _cart.value = current
+            val savingsStr = CurrencyUtils.formatUsd(safeFree * item.unitPrice)
+            _toastMessage.value = if (safeFree > 0) {
+                "🎁 Set $safeFree Free Item(s) to Client for '${item.product.name}' (-$savingsStr)"
+            } else {
+                "Free items removed from '${item.product.name}'"
+            }
+        }
+    }
+
+    fun toggleBuy10Get1Free(productId: Long) {
+        val current = _cart.value.toMutableList()
+        val index = current.indexOfFirst { it.product.id == productId }
+        if (index >= 0) {
+            val item = current[index]
+            val hasFree = item.freeQuantity > 0 || item.isBuy10Get1Free
+            if (hasFree) {
+                current[index] = item.copy(
+                    isBuy10Get1Free = false,
+                    freeQuantity = 0
+                )
+                _cart.value = current
+                _toastMessage.value = "Promotion removed from '${item.product.name}'"
+            } else {
+                val newQty = if (item.quantity < 10) 11.coerceAtMost(item.product.stockQuantity) else item.quantity
+                val autoFree = if (newQty >= 11) newQty / 11 else 1
+                current[index] = item.copy(
+                    isBuy10Get1Free = true,
+                    freeQuantity = autoFree,
+                    quantity = newQty,
+                    discountPercent = 0.0
+                )
+                _cart.value = current
+                val savingsStr = CurrencyUtils.formatUsd(autoFree * item.unitPrice)
+                _toastMessage.value = "🎁 Applied $autoFree Free to Client for '${item.product.name}' (-$savingsStr)"
+            }
+        }
+    }
+
+    fun applyBuy10Get1Example() {
+        val products = allProducts.value
+        val target = products.firstOrNull { it.name.contains("Iced Coffee", ignoreCase = true) }
+            ?: products.firstOrNull { it.category.contains("coffee", ignoreCase = true) }
+            ?: products.firstOrNull { it.stockQuantity >= 11 }
+            ?: products.firstOrNull { it.stockQuantity > 0 }
+        if (target == null) {
+            _toastMessage.value = "No products in stock for example."
+            return
+        }
+        val current = _cart.value.toMutableList()
+        val targetProduct = if (target.stockQuantity < 11) target.copy(stockQuantity = 50) else target
+        val targetQty = 11
+        val index = current.indexOfFirst { it.product.id == target.id }
+        if (index >= 0) {
+            current[index] = current[index].copy(
+                product = targetProduct,
+                quantity = targetQty,
+                isBuy10Get1Free = true,
+                freeQuantity = 1,
+                discountPercent = 0.0
+            )
+        } else {
+            current.add(
+                CartItem(
+                    product = targetProduct,
+                    quantity = targetQty,
+                    isBuy10Get1Free = true,
+                    freeQuantity = 1
+                )
+            )
+        }
+        _cart.value = current
+        val freeSavings = CurrencyUtils.formatUsd(target.sellingPrice)
+        _toastMessage.value = "🎁 Buy 10 Get 1 Free Loaded: 11x '${target.name}' (10 Paid + 1 FREE = -$freeSavings saving!)"
+    }
+
     // Checkout processing
     fun processCheckout(
         paymentMethod: String,
         amountTendered: Double,
-        notes: String = ""
+        notes: String = "",
+        client: ClientEntity? = null
     ) {
         val items = _cart.value
         if (items.isEmpty()) return
 
         val user = _currentUser.value ?: UserEntity(name = "Cashier", role = "CASHIER")
-        val subtotal = items.sumOf { it.subtotal }
-        val discountAmount = subtotal * (_discountPercent.value / 100.0)
-        val afterDiscount = (subtotal - discountAmount).coerceAtLeast(0.0)
+        val grossSubtotal = items.sumOf { it.grossSubtotal }
+        val itemDiscountsTotal = items.sumOf { it.itemDiscountAmount }
+        val subtotalAfterItemDisc = (grossSubtotal - itemDiscountsTotal).coerceAtLeast(0.0)
+        val billDiscountAmount = subtotalAfterItemDisc * (_discountPercent.value / 100.0)
+        val totalDiscount = itemDiscountsTotal + billDiscountAmount
+        val afterDiscount = (grossSubtotal - totalDiscount).coerceAtLeast(0.0)
         val taxAmount = afterDiscount * _taxRate.value
         val grandTotal = afterDiscount + taxAmount
         val changeGiven = if (amountTendered >= grandTotal) (amountTendered - grandTotal) else 0.0
@@ -518,21 +1029,32 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         val taxPct = _taxRate.value * 100.0
         val receiptGap = activeBr?.receiptGap ?: 12
 
+        val totalFreeUnits = items.sumOf { it.freeItemsCount }
+        val clientNote = if (client != null) {
+            "Client: ${client.name} (${client.phone}) • ${client.tierDisplayName}"
+        } else ""
+
+        val finalNotes = buildList {
+            if (clientNote.isNotBlank()) add(clientNote)
+            if (notes.isNotBlank()) add(notes)
+            if (totalFreeUnits > 0) add("Promo: Buy 10 Get 1 Free ($totalFreeUnits item free)")
+        }.joinToString(" | ")
+
         val saleEntity = SaleEntity(
             receiptNumber = receiptNum,
             timestamp = System.currentTimeMillis(),
             cashierId = user.id,
             cashierName = user.name,
-            subtotal = subtotal,
+            subtotal = grossSubtotal,
             taxAmount = taxAmount,
             discountPercent = _discountPercent.value,
-            discountAmount = discountAmount,
+            discountAmount = totalDiscount,
             totalAmount = grandTotal,
             paymentMethod = paymentMethod,
             amountTendered = amountTendered,
             changeGiven = changeGiven,
             itemsCount = items.sumOf { it.quantity },
-            notes = notes,
+            notes = finalNotes,
             branchName = branchName,
             taxPercent = taxPct,
             receiptGap = receiptGap
@@ -544,7 +1066,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 productId = item.product.id,
                 productName = item.product.name,
                 sku = item.product.sku,
-                unitPrice = item.product.sellingPrice,
+                unitPrice = item.unitPrice,
                 costPrice = item.product.costPrice,
                 quantity = item.quantity,
                 itemTotal = item.subtotal,
@@ -556,8 +1078,54 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             val saleId = repository.processSale(saleEntity, saleItems, cashierRole = user.role)
             val completedSaleRecord = saleEntity.copy(id = saleId)
             _completedSale.value = Pair(completedSaleRecord, saleItems)
+
+            // Update client spend, visits, and loyalty points if billed to client
+            if (client != null) {
+                val earnedPoints = (grandTotal * 10).toInt()
+                val updatedClient = client.copy(
+                    totalSpent = client.totalSpent + grandTotal,
+                    visitsCount = client.visitsCount + 1,
+                    loyaltyPoints = client.loyaltyPoints + earnedPoints,
+                    updatedAt = System.currentTimeMillis()
+                )
+                repository.updateClient(updatedClient, user.name, user.id)
+                _toastMessage.value = "Sale #${receiptNum} billed to ${client.name} (+${earnedPoints} pts earned)!"
+            } else {
+                _toastMessage.value = "Sale #$receiptNum completed successfully!"
+            }
+
             clearCart()
-            _toastMessage.value = "Sale #$receiptNum completed successfully!"
+
+            // Send real-time transaction notification to Telegram
+            telegramNotificationService.sendTransactionNotification(
+                sale = completedSaleRecord,
+                items = saleItems,
+                khrRate = _khrExchangeRate.value
+            )
+        }
+    }
+
+    // Telegram Configuration & Testing Methods
+    fun updateTelegramConfig(botToken: String, chatId: String, isEnabled: Boolean) {
+        telegramNotificationService.saveConfig(botToken, chatId, isEnabled)
+        _toastMessage.value = if (isEnabled) "Telegram alerts updated and activated" else "Telegram alerts disabled"
+    }
+
+    suspend fun testTelegramNotification(token: String, chatId: String, onResult: (Boolean, String) -> Unit) {
+        val result = telegramNotificationService.sendTestMessage(token, chatId)
+        if (result.isSuccess) {
+            onResult(true, "Test message delivered to Telegram ($chatId)!")
+        } else {
+            val err = result.exceptionOrNull()?.localizedMessage ?: "Unknown error"
+            onResult(false, "Telegram error: $err")
+        }
+    }
+
+    fun resendSaleToTelegram(sale: SaleEntity) {
+        viewModelScope.launch {
+            val items = repository.getSaleItems(sale.id)
+            telegramNotificationService.sendTransactionNotification(sale, items, _khrExchangeRate.value)
+            _toastMessage.value = "Resent Receipt #${sale.receiptNumber} to Telegram"
         }
     }
 
@@ -741,7 +1309,15 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     // Branch Management
-    fun addBranch(name: String, code: String = "", address: String = "", phone: String = "", isMain: Boolean = false) {
+    fun addBranch(
+        name: String,
+        code: String = "",
+        address: String = "",
+        phone: String = "",
+        isMain: Boolean = false,
+        wifiName: String = "TR_Store_Guest",
+        wifiPassword: String = "trcoffee2026"
+    ) {
         val trimmed = name.trim()
         if (trimmed.isBlank()) return
         val user = _currentUser.value
@@ -753,14 +1329,25 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 code = code.trim().ifBlank { "BR-${Random.nextInt(10, 99)}" },
                 address = address.trim(),
                 phone = phone.trim(),
-                isMain = isMain
+                isMain = isMain,
+                wifiName = wifiName.trim().ifBlank { "TR_${trimmed.replace(" ", "_")}_Guest" },
+                wifiPassword = wifiPassword.trim().ifBlank { "trcoffee2026" }
             )
             repository.insertBranch(branch)
             _toastMessage.value = "Branch '$trimmed' created"
         }
     }
 
-    fun editBranch(branch: BranchEntity, newName: String, newCode: String = "", newAddress: String = "", newPhone: String = "", isMain: Boolean = false) {
+    fun editBranch(
+        branch: BranchEntity,
+        newName: String,
+        newCode: String = "",
+        newAddress: String = "",
+        newPhone: String = "",
+        isMain: Boolean = false,
+        newWifiName: String = branch.wifiName,
+        newWifiPassword: String = branch.wifiPassword
+    ) {
         val trimmedNew = newName.trim()
         if (trimmedNew.isBlank()) return
         val user = _currentUser.value
@@ -772,7 +1359,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 code = newCode.trim(),
                 address = newAddress.trim(),
                 phone = newPhone.trim(),
-                isMain = isMain
+                isMain = isMain,
+                wifiName = newWifiName.trim(),
+                wifiPassword = newWifiPassword.trim()
             )
             repository.updateBranch(
                 oldName = branch.name,
@@ -780,7 +1369,34 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 operatorName = operator,
                 staffId = staffId
             )
+            if (_activeBranch.value?.id == branch.id) {
+                _activeBranch.value = updated
+            }
             _toastMessage.value = "Branch updated: '${branch.name}' -> '$trimmedNew'"
+        }
+    }
+
+    fun updateBranchWifi(branch: BranchEntity, newWifiName: String, newWifiPassword: String) {
+        val trimmedName = newWifiName.trim()
+        val trimmedPass = newWifiPassword.trim()
+        val user = _currentUser.value
+        val operator = user?.name ?: "Store Manager"
+        val staffId = user?.id ?: 1L
+        viewModelScope.launch {
+            val updated = branch.copy(
+                wifiName = trimmedName.ifBlank { "TR_Store_Guest" },
+                wifiPassword = trimmedPass.ifBlank { "trcoffee2026" }
+            )
+            repository.updateBranch(
+                oldName = branch.name,
+                branch = updated,
+                operatorName = operator,
+                staffId = staffId
+            )
+            if (_activeBranch.value?.id == branch.id) {
+                _activeBranch.value = updated
+            }
+            _toastMessage.value = "Wi-Fi updated for '${branch.name}': $trimmedName"
         }
     }
 
@@ -841,7 +1457,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         receiptFooter: String,
         taxPercent: Double,
         receiptGap: Int,
-        setAsActive: Boolean = false
+        setAsActive: Boolean = false,
+        wifiName: String = branch.wifiName,
+        wifiPassword: String = branch.wifiPassword
     ) {
         val user = _currentUser.value
         val operator = user?.name ?: "Store Manager"
@@ -855,7 +1473,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 phone = phone.trim(),
                 receiptFooter = receiptFooter.trim(),
                 taxPercent = taxPercent.coerceIn(0.0, 100.0),
-                receiptGap = receiptGap.coerceIn(4, 40)
+                receiptGap = receiptGap.coerceIn(4, 40),
+                wifiName = wifiName.trim().ifBlank { branch.wifiName },
+                wifiPassword = wifiPassword.trim().ifBlank { branch.wifiPassword }
             )
             repository.updateBranchReceiptConfig(updated, operator, staffId)
             if (setAsActive || _activeBranch.value?.id == branch.id) {
@@ -906,6 +1526,31 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         _currentUser.value = user
         _toastMessage.value = "Switched to ${user.name} (${user.role})"
         logUserSwitchActivity(user)
+    }
+
+    fun logoutCurrentUser() {
+        viewModelScope.launch {
+            val user = _currentUser.value
+            if (user != null) {
+                val auditLog = ActivityLogEntity.createSecureLog(
+                    staffId = user.id,
+                    staffName = user.name,
+                    staffRole = user.role,
+                    category = ActivityCategory.STAFF_SECURITY,
+                    action = "STAFF_SESSION_LOGOUT",
+                    entityType = "STAFF",
+                    entityId = "STAFF-${user.id}",
+                    details = "Admin ${user.name} (${user.role}) logged out of session",
+                    metadataJson = """{"staffId":${user.id},"name":"${user.name}","role":"${user.role}"}"""
+                )
+                repository.logActivity(auditLog)
+            }
+            val users = allUsers.value
+            val nonAdmin = users.firstOrNull { it.role.equals("CASHIER", ignoreCase = true) }
+                ?: users.firstOrNull { !it.role.equals("ADMIN", ignoreCase = true) }
+            _currentUser.value = nonAdmin
+            _toastMessage.value = "Admin logged out. Switched to ${nonAdmin?.name ?: "Cashier"}."
+        }
     }
 
     private fun logUserSwitchActivity(user: UserEntity) {
@@ -964,12 +1609,14 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         )
     }
 
-    fun addUser(name: String, role: String, pin: String, email: String) {
+    fun addUser(name: String, role: String, pin: String, email: String, telegram: String = "") {
+        val defaultTelegram = if (role.equals("ADMIN", ignoreCase = true) && telegram.isBlank()) "@chandaranong" else telegram.trim()
         val newUser = UserEntity(
             name = name,
             role = role,
             pin = pin,
-            email = email
+            email = email,
+            telegram = defaultTelegram
         )
         viewModelScope.launch {
             repository.insertUser(newUser)
@@ -1066,6 +1713,33 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             repository.insertClient(newClient, operator, staffId)
             _toastMessage.value = "Client profile '${newClient.name}' created!"
         }
+    }
+
+    suspend fun createAndSelectClient(
+        name: String,
+        phone: String,
+        email: String = "",
+        tier: String = "BRONZE",
+        address: String = "",
+        notes: String = ""
+    ): ClientEntity {
+        val operator = _currentUser.value?.name ?: "Staff"
+        val staffId = _currentUser.value?.id ?: 1L
+        val newClient = ClientEntity(
+            name = name.trim(),
+            phone = phone.trim(),
+            email = email.trim(),
+            tier = tier,
+            loyaltyPoints = 0,
+            favoriteOrder = "",
+            notes = notes.trim(),
+            address = address.trim()
+        )
+        val id = repository.insertClient(newClient, operator, staffId)
+        val created = newClient.copy(id = id)
+        _selectedClient.value = created
+        _toastMessage.value = "New client '${created.name}' registered & linked to bill!"
+        return created
     }
 
     fun updateClient(client: ClientEntity) {

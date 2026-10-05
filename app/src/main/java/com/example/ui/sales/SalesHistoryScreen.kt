@@ -28,6 +28,7 @@ import androidx.compose.material.icons.filled.PictureAsPdf
 import androidx.compose.material.icons.filled.QrCode
 import androidx.compose.material.icons.filled.Receipt
 import androidx.compose.material.icons.filled.ReceiptLong
+import androidx.compose.material.icons.filled.Send
 import androidx.compose.material.icons.filled.ShowChart
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -56,6 +57,7 @@ import com.example.ui.components.RechartsSalesTrendsChart
 import com.example.ui.components.formatCurrency
 import com.example.ui.components.formatDateTime
 import com.example.ui.pos.ReceiptDialog
+import com.example.ui.reports.AdminSalesReportView
 import com.example.ui.theme.RetailSlate100
 import com.example.ui.theme.RetailSlate300
 import com.example.ui.theme.RetailSlate500
@@ -65,6 +67,8 @@ import com.example.ui.theme.RetailStatusBlue
 import com.example.ui.theme.RetailStatusBlueContainer
 import com.example.ui.theme.RetailStatusGreen
 import com.example.ui.theme.RetailStatusGreenContainer
+import com.example.ui.theme.RetailStatusPurple
+import com.example.ui.theme.RetailStatusPurpleContainer
 import com.example.ui.theme.RetailTealLight
 import com.example.ui.theme.RetailTealPrimary
 
@@ -75,8 +79,15 @@ fun SalesHistoryScreen(
 ) {
     val sales by viewModel.allSales.collectAsState()
     val completedSalePair by viewModel.completedSale.collectAsState()
+    val currentUser by viewModel.currentUser.collectAsState()
+    val isCurrentUserAdmin = currentUser?.role?.equals("ADMIN", ignoreCase = true) == true
 
-    var activeView by remember { mutableStateOf("TRENDS") } // "TRENDS" or "RECEIPTS"
+    var activeView by remember { mutableStateOf("TRENDS") } // "TRENDS", "RECEIPTS", or "REPORT"
+
+    // If active view is REPORT but user is not admin, revert to TRENDS
+    if (activeView == "REPORT" && !isCurrentUserAdmin) {
+        activeView = "TRENDS"
+    }
 
     val totalRevenue = sales.sumOf { it.totalAmount }
     val transactionsCount = sales.size
@@ -90,14 +101,14 @@ fun SalesHistoryScreen(
     ) {
         Spacer(modifier = Modifier.height(10.dp))
 
-        // Top Dashboard Navigation Switcher
+        // Top Sales View Switcher
         Surface(
             color = RetailSlate100,
             shape = RoundedCornerShape(12.dp),
             border = BorderStroke(1.dp, RetailSlate300.copy(alpha = 0.5f)),
             modifier = Modifier
                 .fillMaxWidth()
-                .testTag("dashboard_view_switcher")
+                .testTag("sales_view_switcher")
         ) {
             Row(
                 modifier = Modifier
@@ -105,7 +116,7 @@ fun SalesHistoryScreen(
                     .padding(3.dp),
                 horizontalArrangement = Arrangement.spacedBy(4.dp)
             ) {
-                // Trends Dashboard Tab
+                // Trends Tab
                 Box(
                     modifier = Modifier
                         .weight(1f)
@@ -113,7 +124,7 @@ fun SalesHistoryScreen(
                         .background(if (activeView == "TRENDS") Color.White else Color.Transparent)
                         .clickable { activeView = "TRENDS" }
                         .padding(vertical = 8.dp)
-                        .testTag("tab_trends_dashboard"),
+                        .testTag("tab_sales_trends"),
                     contentAlignment = Alignment.Center
                 ) {
                     Row(
@@ -128,7 +139,7 @@ fun SalesHistoryScreen(
                         )
                         Spacer(modifier = Modifier.width(6.dp))
                         Text(
-                            text = "Trends Dashboard",
+                            text = "Sales Trends",
                             fontSize = 12.sp,
                             fontWeight = if (activeView == "TRENDS") FontWeight.Bold else FontWeight.Medium,
                             color = if (activeView == "TRENDS") RetailSlate900 else RetailSlate500
@@ -157,13 +168,59 @@ fun SalesHistoryScreen(
                             tint = if (activeView == "RECEIPTS") RetailTealPrimary else RetailSlate500,
                             modifier = Modifier.size(16.dp)
                         )
-                        Spacer(modifier = Modifier.width(6.dp))
+                        Spacer(modifier = Modifier.width(4.dp))
                         Text(
-                            text = "Receipts Ledger (${sales.size})",
-                            fontSize = 12.sp,
+                            text = "Receipts (${sales.size})",
+                            fontSize = 11.sp,
                             fontWeight = if (activeView == "RECEIPTS") FontWeight.Bold else FontWeight.Medium,
                             color = if (activeView == "RECEIPTS") RetailSlate900 else RetailSlate500
                         )
+                    }
+                }
+
+                // Admin Report Tab (ONLY SHOWN IN ADMIN USER)
+                if (isCurrentUserAdmin) {
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .clip(RoundedCornerShape(9.dp))
+                            .background(if (activeView == "REPORT") Color.White else Color.Transparent)
+                            .clickable { activeView = "REPORT" }
+                            .padding(vertical = 8.dp)
+                            .testTag("tab_admin_sales_report_sales"),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Filled.Assessment,
+                                contentDescription = null,
+                                tint = if (activeView == "REPORT") RetailTealPrimary else RetailSlate500,
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(
+                                text = "Report",
+                                fontSize = 11.sp,
+                                fontWeight = if (activeView == "REPORT") FontWeight.Bold else FontWeight.Medium,
+                                color = if (activeView == "REPORT") RetailSlate900 else RetailSlate500
+                            )
+                            Spacer(modifier = Modifier.width(3.dp))
+                            Surface(
+                                color = RetailStatusPurpleContainer,
+                                shape = RoundedCornerShape(4.dp)
+                            ) {
+                                Text(
+                                    text = "ADMIN",
+                                    color = RetailStatusPurple,
+                                    fontSize = 8.sp,
+                                    fontWeight = FontWeight.ExtraBold,
+                                    modifier = Modifier.padding(horizontal = 3.dp, vertical = 1.dp)
+                                )
+                            }
+                        }
                     }
                 }
             }
@@ -171,7 +228,8 @@ fun SalesHistoryScreen(
 
         Spacer(modifier = Modifier.height(10.dp))
 
-        if (activeView == "TRENDS") {
+        when (activeView) {
+            "TRENDS" -> {
             // TRENDS DASHBOARD VIEW
             LazyColumn(
                 contentPadding = PaddingValues(bottom = 24.dp),
@@ -309,7 +367,8 @@ fun SalesHistoryScreen(
                     }
                 }
             }
-        } else {
+            }
+            "RECEIPTS" -> {
             // FULL RECEIPTS LEDGER VIEW
             Column(modifier = Modifier.fillMaxSize()) {
                 Text(
@@ -352,11 +411,20 @@ fun SalesHistoryScreen(
                         items(sales, key = { it.id }) { sale ->
                             SaleRowCard(
                                 sale = sale,
-                                onClick = { viewModel.viewPastReceipt(sale) }
+                                onClick = { viewModel.viewPastReceipt(sale) },
+                                onSendToTelegram = { viewModel.resendSaleToTelegram(sale) }
                             )
                         }
                     }
                 }
+            }
+            }
+            else -> {
+                // ADMIN SALES REPORT VIEW
+                AdminSalesReportView(
+                    viewModel = viewModel,
+                    modifier = Modifier.fillMaxSize()
+                )
             }
         }
     }
@@ -374,7 +442,8 @@ fun SalesHistoryScreen(
 @Composable
 fun SaleRowCard(
     sale: SaleEntity,
-    onClick: () -> Unit
+    onClick: () -> Unit,
+    onSendToTelegram: () -> Unit = {}
 ) {
     Card(
         colors = CardDefaults.cardColors(containerColor = Color.White),
@@ -426,28 +495,56 @@ fun SaleRowCard(
                     color = RetailTealPrimary
                 )
                 Spacer(modifier = Modifier.height(4.dp))
-                Surface(
-                    color = Color(0xFFF0FDF4),
-                    shape = RoundedCornerShape(4.dp),
-                    border = androidx.compose.foundation.BorderStroke(0.5.dp, Color(0xFF86EFAC))
-                ) {
-                    Row(
-                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
-                        verticalAlignment = Alignment.CenterVertically
+                Row(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Surface(
+                        color = Color(0xFFF0FDF4),
+                        shape = RoundedCornerShape(4.dp),
+                        border = androidx.compose.foundation.BorderStroke(0.5.dp, Color(0xFF86EFAC))
                     ) {
-                        Icon(
-                            Icons.Filled.PictureAsPdf,
-                            contentDescription = null,
-                            tint = Color(0xFF15803D),
-                            modifier = Modifier.size(11.dp)
-                        )
-                        Spacer(modifier = Modifier.width(3.dp))
-                        Text(
-                            text = "PDF Receipt",
-                            fontSize = 10.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            color = Color(0xFF15803D)
-                        )
+                        Row(
+                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                Icons.Filled.PictureAsPdf,
+                                contentDescription = null,
+                                tint = Color(0xFF15803D),
+                                modifier = Modifier.size(11.dp)
+                            )
+                            Spacer(modifier = Modifier.width(3.dp))
+                            Text(
+                                text = "PDF",
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = Color(0xFF15803D)
+                            )
+                        }
+                    }
+
+                    Surface(
+                        color = Color(0xFFE0F2FE),
+                        shape = RoundedCornerShape(4.dp),
+                        border = androidx.compose.foundation.BorderStroke(0.5.dp, Color(0xFF7DD3FC)),
+                        modifier = Modifier.clickable { onSendToTelegram() }
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                Icons.Filled.Send,
+                                contentDescription = "Telegram",
+                                tint = Color(0xFF0284C7),
+                                modifier = Modifier.size(10.dp)
+                            )
+                            Spacer(modifier = Modifier.width(3.dp))
+                            Text(
+                                text = "Telegram",
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color(0xFF0369A1)
+                            )
+                        }
                     }
                 }
             }

@@ -611,6 +611,32 @@ fun DigitalReceiptScreen(
                         )
                     }
 
+                    // Client / Customer Banner on Receipt
+                    val clientInfoLine = remember(sale.notes) {
+                        sale.notes.split("|").firstOrNull { it.trim().startsWith("Client:", ignoreCase = true) }?.trim()
+                    }
+                    if (clientInfoLine != null) {
+                        Surface(
+                            color = Color(0xFFDCFCE7),
+                            shape = RoundedCornerShape(6.dp),
+                            border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF86EFAC)),
+                            modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 5.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = "👤 $clientInfoLine",
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    fontFamily = FontFamily.Monospace,
+                                    color = Color(0xFF14532D)
+                                )
+                            }
+                        }
+                    }
+
                     Text(
                         text = "--------------------------------------------------",
                         fontFamily = FontFamily.Monospace,
@@ -676,6 +702,29 @@ fun DigitalReceiptScreen(
                                         fontFamily = FontFamily.Monospace,
                                         color = RetailSlate500
                                     )
+                                    val lineSavings = (item.quantity * item.unitPrice) - item.itemTotal
+                                    val freeUnitsApprox = if (item.unitPrice > 0) Math.round(lineSavings / item.unitPrice).toInt() else 0
+                                    if (lineSavings > 0.009) {
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            horizontalArrangement = Arrangement.SpaceBetween
+                                        ) {
+                                            Text(
+                                                text = if (freeUnitsApprox > 0) "  └ 🎁 PROMO ($freeUnitsApprox Unit FREE)" else "  └ 🎁 DISCOUNT SAVINGS",
+                                                fontSize = 10.sp,
+                                                fontFamily = FontFamily.Monospace,
+                                                fontWeight = FontWeight.Bold,
+                                                color = Color(0xFF15803D)
+                                            )
+                                            Text(
+                                                text = "-${formatPriceByMode(lineSavings)}",
+                                                fontSize = 10.sp,
+                                                fontFamily = FontFamily.Monospace,
+                                                fontWeight = FontWeight.Bold,
+                                                color = Color(0xFF15803D)
+                                            )
+                                        }
+                                    }
                                 }
                             }
                         }

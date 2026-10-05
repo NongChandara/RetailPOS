@@ -33,6 +33,7 @@ class RetailRepository(private val database: AppDatabase) {
     val allBranchesList: Flow<List<BranchEntity>> = branchDao.getAllBranches()
     val allClients: Flow<List<ClientEntity>> = clientDao.getAllClients()
     val allSales: Flow<List<SaleEntity>> = saleDao.getAllSales()
+    val allSaleItems: Flow<List<SaleItemEntity>> = saleDao.getAllSaleItems()
     val allMovements: Flow<List<StockMovementEntity>> = stockMovementDao.getAllMovements()
     val allUsers: Flow<List<UserEntity>> = userDao.getAllUsers()
     val allLogs: Flow<List<ActivityLogEntity>> = activityLogDao.getAllLogs()

@@ -34,6 +34,8 @@ import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.SpaceBar
 import androidx.compose.material.icons.filled.Storefront
 import androidx.compose.material.icons.filled.Visibility
+import androidx.compose.material.icons.filled.VisibilityOff
+import androidx.compose.material.icons.filled.Wifi
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -47,6 +49,9 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -99,7 +104,9 @@ fun BranchReceiptAndTaxDialog(
         footer: String,
         taxPercent: Double,
         receiptGap: Int,
-        setAsActive: Boolean
+        setAsActive: Boolean,
+        wifiName: String,
+        wifiPassword: String
     ) -> Unit,
     onSetActiveBranch: (BranchEntity) -> Unit
 ) {
@@ -116,6 +123,9 @@ fun BranchReceiptAndTaxDialog(
     var footer by remember { mutableStateOf(selectedBranch.receiptFooter) }
     var taxPercentText by remember { mutableStateOf(String.format(Locale.US, "%.1f", selectedBranch.taxPercent).removeSuffix(".0")) }
     var receiptGap by remember { mutableIntStateOf(selectedBranch.receiptGap) }
+    var wifiName by remember { mutableStateOf(selectedBranch.wifiName) }
+    var wifiPassword by remember { mutableStateOf(selectedBranch.wifiPassword) }
+    var showWifiPass by remember { mutableStateOf(false) }
     var showPreview by remember { mutableStateOf(true) }
     var setAsActiveBranch by remember { mutableStateOf(selectedBranch.id == activeBranch?.id) }
 
@@ -129,6 +139,8 @@ fun BranchReceiptAndTaxDialog(
         footer = selectedBranch.receiptFooter
         taxPercentText = String.format(Locale.US, "%.1f", selectedBranch.taxPercent).removeSuffix(".0")
         receiptGap = selectedBranch.receiptGap
+        wifiName = selectedBranch.wifiName
+        wifiPassword = selectedBranch.wifiPassword
         setAsActiveBranch = selectedBranch.id == activeBranch?.id
     }
 
@@ -543,6 +555,68 @@ fun BranchReceiptAndTaxDialog(
                     }
                 }
 
+                // Section 4b: Customer Free Wi-Fi (SSID & Password)
+                Text(
+                    text = "4b. Store Customer Free Wi-Fi Credentials",
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 13.sp,
+                    color = RetailSlate900
+                )
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    OutlinedTextField(
+                        value = wifiName,
+                        onValueChange = { wifiName = it },
+                        label = { Text("Wi-Fi Name (SSID)") },
+                        placeholder = { Text("e.g. TR_Store_Guest") },
+                        singleLine = true,
+                        shape = RoundedCornerShape(10.dp),
+                        modifier = Modifier
+                            .weight(1f)
+                            .testTag("receipt_wifi_name_input")
+                    )
+                    OutlinedTextField(
+                        value = wifiPassword,
+                        onValueChange = { wifiPassword = it },
+                        label = { Text("Wi-Fi Password") },
+                        placeholder = { Text("e.g. trcoffee2026") },
+                        singleLine = true,
+                        visualTransformation = if (showWifiPass) VisualTransformation.None else PasswordVisualTransformation(),
+                        trailingIcon = {
+                            IconButton(onClick = { showWifiPass = !showWifiPass }) {
+                                Icon(
+                                    if (showWifiPass) Icons.Filled.VisibilityOff else Icons.Filled.Visibility,
+                                    contentDescription = "Toggle password visibility",
+                                    modifier = Modifier.size(18.dp)
+                                )
+                            }
+                        },
+                        shape = RoundedCornerShape(10.dp),
+                        modifier = Modifier
+                            .weight(1f)
+                            .testTag("receipt_wifi_pass_input")
+                    )
+                }
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.End
+                ) {
+                    TextButton(
+                        onClick = {
+                            val wifiNote = "Free Wi-Fi: ${wifiName.ifBlank { "TR_Guest" }} (PW: ${wifiPassword.ifBlank { "trcoffee2026" }})"
+                            footer = if (footer.isBlank()) wifiNote else if (!footer.contains("Wi-Fi")) "$footer • $wifiNote" else footer
+                        }
+                    ) {
+                        Icon(Icons.Filled.Wifi, contentDescription = null, modifier = Modifier.size(14.dp), tint = RetailTealPrimary)
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("Add Wi-Fi to Receipt Footer Note", fontSize = 11.sp, color = RetailTealPrimary)
+                    }
+                }
+
                 // Section 5: Receipt Footer
                 Text(
                     text = "5. Receipt Footer Note (Customer Greeting / Wi-Fi / Policy)",
@@ -646,7 +720,9 @@ fun BranchReceiptAndTaxDialog(
                                     footer,
                                     parsedTaxPercent,
                                     receiptGap,
-                                    setAsActiveBranch
+                                    setAsActiveBranch,
+                                    wifiName,
+                                    wifiPassword
                                 )
                                 onDismiss()
                             },

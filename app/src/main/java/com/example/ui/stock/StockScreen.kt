@@ -31,6 +31,7 @@ import androidx.compose.material.icons.filled.AddPhotoAlternate
 import androidx.compose.material.icons.filled.AdminPanelSettings
 import androidx.compose.material.icons.filled.Category
 import androidx.compose.material.icons.filled.Clear
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.FilterList
@@ -40,9 +41,13 @@ import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.PhotoLibrary
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Storefront
+import androidx.compose.material.icons.filled.Timeline
 import androidx.compose.material.icons.filled.TrendingDown
 import androidx.compose.material.icons.filled.TrendingUp
 import androidx.compose.material.icons.filled.Warning
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
+import com.example.ui.inventory.InventoryTrackingScreen
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import com.example.ui.components.ProductThumbnail
@@ -132,6 +137,7 @@ fun StockScreen(
     var showAddDialog by remember { mutableStateOf(false) }
     var showCategoryManagementDialog by remember { mutableStateOf(false) }
     var showBranchManagementDialog by remember { mutableStateOf(false) }
+    var showTrackingDialog by remember { mutableStateOf(false) }
 
     val totalSkus = allProducts.size
     val totalUnits = allProducts.sumOf { it.stockQuantity }
@@ -254,34 +260,45 @@ fun StockScreen(
                 )
             }
 
-            // Quick management actions for Categories & Branches
+            // Quick management actions for Categories, Branches & Tracking
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(horizontal = 16.dp, vertical = 2.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 OutlinedButton(
                     onClick = { showCategoryManagementDialog = true },
                     shape = RoundedCornerShape(10.dp),
-                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+                    contentPadding = PaddingValues(horizontal = 6.dp, vertical = 4.dp),
                     modifier = Modifier.weight(1f).testTag("manage_categories_btn")
                 ) {
-                    Icon(Icons.Filled.Category, contentDescription = null, modifier = Modifier.size(15.dp), tint = RetailTealPrimary)
-                    Spacer(modifier = Modifier.width(6.dp))
+                    Icon(Icons.Filled.Category, contentDescription = null, modifier = Modifier.size(14.dp), tint = RetailTealPrimary)
+                    Spacer(modifier = Modifier.width(4.dp))
                     Text("Categories (${allCategories.size})", fontSize = 11.sp, color = RetailSlate900, fontWeight = FontWeight.SemiBold)
                 }
 
                 OutlinedButton(
                     onClick = { showBranchManagementDialog = true },
                     shape = RoundedCornerShape(10.dp),
-                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+                    contentPadding = PaddingValues(horizontal = 6.dp, vertical = 4.dp),
                     modifier = Modifier.weight(1f).testTag("manage_branches_btn")
                 ) {
-                    Icon(Icons.Filled.Storefront, contentDescription = null, modifier = Modifier.size(15.dp), tint = RetailTealPrimary)
-                    Spacer(modifier = Modifier.width(6.dp))
+                    Icon(Icons.Filled.Storefront, contentDescription = null, modifier = Modifier.size(14.dp), tint = RetailTealPrimary)
+                    Spacer(modifier = Modifier.width(4.dp))
                     Text("Branches (${allBranches.size})", fontSize = 11.sp, color = RetailSlate900, fontWeight = FontWeight.SemiBold)
+                }
+
+                OutlinedButton(
+                    onClick = { showTrackingDialog = true },
+                    shape = RoundedCornerShape(10.dp),
+                    contentPadding = PaddingValues(horizontal = 6.dp, vertical = 4.dp),
+                    modifier = Modifier.weight(1f).testTag("manage_tracking_btn")
+                ) {
+                    Icon(Icons.Filled.Timeline, contentDescription = null, modifier = Modifier.size(14.dp), tint = RetailTealPrimary)
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text("Tracking", fontSize = 11.sp, color = RetailSlate900, fontWeight = FontWeight.SemiBold)
                 }
             }
 
@@ -537,13 +554,63 @@ fun StockScreen(
             onDeleteBranch = { branch ->
                 viewModel.deleteBranch(branch, "Main Branch")
             },
-            onUpdateBranchReceiptConfig = { branch, header, subtitle, vatTin, addr, phone, footer, taxPct, gap, setAsActive ->
-                viewModel.updateBranchReceiptConfig(branch, header, subtitle, vatTin, addr, phone, footer, taxPct, gap, setAsActive)
+            onUpdateBranchReceiptConfig = { branch, header, subtitle, vatTin, addr, phone, footer, taxPct, gap, setAsActive, wifiName, wifiPassword ->
+                viewModel.updateBranchReceiptConfig(branch, header, subtitle, vatTin, addr, phone, footer, taxPct, gap, setAsActive, wifiName, wifiPassword)
+            },
+            onUpdateBranchWifi = { branch, wifiName, wifiPassword ->
+                viewModel.updateBranchWifi(branch, wifiName, wifiPassword)
             },
             onSetActiveBranch = { branch ->
                 viewModel.setActiveBranch(branch)
             }
         )
+    }
+
+    if (showTrackingDialog) {
+        Dialog(
+            onDismissRequest = { showTrackingDialog = false },
+            properties = DialogProperties(usePlatformDefaultWidth = false)
+        ) {
+            Surface(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(top = 28.dp),
+                shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp),
+                color = MaterialTheme.colorScheme.background
+            ) {
+                Column(modifier = Modifier.fillMaxSize()) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 10.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                Icons.Filled.Timeline,
+                                contentDescription = null,
+                                tint = RetailTealPrimary,
+                                modifier = Modifier.size(20.dp)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = "Inventory Tracking & Logs",
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 16.sp,
+                                color = RetailSlate900
+                            )
+                        }
+                        IconButton(onClick = { showTrackingDialog = false }) {
+                            Icon(Icons.Filled.Close, contentDescription = "Close", tint = RetailSlate500)
+                        }
+                    }
+                    Box(modifier = Modifier.weight(1f)) {
+                        InventoryTrackingScreen(viewModel = viewModel)
+                    }
+                }
+            }
+        }
     }
 
     // Add or Edit Product Dialog

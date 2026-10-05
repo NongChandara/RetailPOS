@@ -1,0 +1,51 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 400" width="100%" height="100%">
+  <defs>
+    <linearGradient id="bgCream" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#2c1524"/>
+      <stop offset="100%" stop-color="#12060f"/>
+    </linearGradient>
+    <linearGradient id="jarGlass" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#fdf2f8"/>
+      <stop offset="50%" stop-color="#ffffff"/>
+      <stop offset="100%" stop-color="#fce7f3"/>
+    </linearGradient>
+    <linearGradient id="roseLid" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#be185d"/>
+      <stop offset="50%" stop-color="#f43f5e"/>
+      <stop offset="100%" stop-color="#9d174d"/>
+    </linearGradient>
+  </defs>
+
+  <rect width="400" height="400" rx="32" fill="url(#bgCream)"/>
+  <circle cx="200" cy="200" r="160" fill="none" stroke="#f472b6" stroke-opacity="0.12" stroke-width="1.5"/>
+
+  <ellipse cx="200" cy="345" rx="75" ry="16" fill="#000000" opacity="0.65"/>
+
+  <!-- Frosted Jar Body -->
+  <rect x="130" y="200" width="140" height="120" rx="24" fill="url(#jarGlass)" stroke="#fbcfe8" stroke-width="2"/>
+  
+  <!-- Inner Rich Cream Swirl Layer -->
+  <path d="M140 230 Q170 215 200 225 Q230 235 260 220 L260 300 Q260 310 248 310 L152 310 Q140 310 140 300 Z" fill="#fff1f2"/>
+
+  <!-- Rose Gold / Pink Metallic Lid -->
+  <rect x="125" y="150" width="150" height="50" rx="14" fill="url(#roseLid)"/>
+  <ellipse cx="200" cy="150" rx="75" ry="16" fill="#fb7185"/>
+
+  <!-- Jar Label -->
+  <rect x="145" y="240" width="110" height="60" rx="8" fill="#ffffff" stroke="#fce7f3" stroke-width="1"/>
+  <text x="200" y="258" fill="#9d174d" font-family="system-ui, sans-serif" font-size="8.5" font-weight="900" text-anchor="middle" letter-spacing="1">CERAMIDE BARRIER</text>
+  <text x="200" y="272" fill="#be185d" font-family="system-ui, sans-serif" font-size="10" font-weight="900" text-anchor="middle">MOISTURE CREAM</text>
+  <text x="200" y="286" fill="#94a3b8" font-family="system-ui, sans-serif" font-size="7" font-weight="600" text-anchor="middle">50ml • Intense Hydration</text>
+
+  <!-- Glass shine -->
+  <path d="M136 210 L136 300" stroke="#ffffff" stroke-width="3" stroke-linecap="round" opacity="0.8"/>
+
+  <!-- Soft cream dollop preview on side -->
+  <path d="M280 200 C300 180, 310 220, 290 230 C275 235, 270 210, 280 200 Z" fill="#fff1f2" stroke="#fecdd3" stroke-width="1"/>
+
+  <!-- Label Badge -->
+  <g transform="translate(200, 368)">
+    <rect x="-85" y="-14" width="170" height="26" rx="13" fill="#be185d" stroke="#fbcfe8" stroke-width="1"/>
+    <text x="0" y="3" fill="#ffffff" font-family="system-ui, sans-serif" font-size="11" font-weight="900" text-anchor="middle" letter-spacing="1">CERAMIDE CREAM</text>
+  </g>
+</svg>

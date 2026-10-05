@@ -13,7 +13,8 @@ data class UserEntity(
     val email: String = "",
     val branch: String = "Main Branch",
     val isActive: Boolean = true,
-    val createdAt: Long = System.currentTimeMillis()
+    val createdAt: Long = System.currentTimeMillis(),
+    val telegram: String = ""
 )
 
 @Entity(tableName = "categories")
@@ -41,7 +42,9 @@ data class BranchEntity(
     val receiptVatTin: String = "VAT TIN: K001-90213847",
     val receiptFooter: String = "Thank you for shopping with us! • Goods returnable within 7 days",
     val taxPercent: Double = 8.0,
-    val receiptGap: Int = 12 // Spacing gap between receipt sections in dp/lines
+    val receiptGap: Int = 12, // Spacing gap between receipt sections in dp/lines
+    val wifiName: String = "TR_Store_Guest",
+    val wifiPassword: String = "trcoffee2026"
 )
 
 @Entity(tableName = "sales")

@@ -1,0 +1,50 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 400" width="100%" height="100%">
+  <defs>
+    <linearGradient id="bgCroiss" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#2a1b12"/>
+      <stop offset="100%" stop-color="#140c08"/>
+    </linearGradient>
+    <linearGradient id="croissGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#d97706"/>
+      <stop offset="50%" stop-color="#b45309"/>
+      <stop offset="85%" stop-color="#78350f"/>
+      <stop offset="100%" stop-color="#fef3c7"/>
+    </linearGradient>
+  </defs>
+
+  <rect width="400" height="400" rx="32" fill="url(#bgCroiss)"/>
+  
+  <!-- Wooden Plate / Board -->
+  <ellipse cx="200" cy="240" rx="145" ry="75" fill="#3e271a" stroke="#5c3826" stroke-width="3"/>
+  <ellipse cx="200" cy="235" rx="138" ry="68" fill="#523220"/>
+
+  <!-- Shadow -->
+  <ellipse cx="200" cy="245" rx="100" ry="30" fill="#1f1109" opacity="0.8"/>
+
+  <!-- Croissant Crescent Curved Body -->
+  <!-- Back folds -->
+  <path d="M100 230 C80 180, 140 140, 200 140 C260 140, 320 180, 300 230 C270 205, 230 195, 200 195 C170 195, 130 205, 100 230 Z" fill="#b45309"/>
+  <!-- Middle bulge -->
+  <ellipse cx="200" cy="205" rx="75" ry="45" fill="#d97706"/>
+  <!-- Crust ridges & layered flaky pastry rolls -->
+  <path d="M140 215 C150 175, 175 165, 200 165 C225 165, 250 175, 260 215 C240 228, 220 235, 200 235 C180 235, 160 228, 140 215 Z" fill="#f59e0b"/>
+  <path d="M165 210 C175 180, 190 175, 200 175 C210 175, 225 180, 235 210 C220 218, 210 220, 200 220 C190 220, 180 218, 165 210 Z" fill="#fef08a" opacity="0.85"/>
+  <!-- Flaky crust tips -->
+  <path d="M90 238 C80 230, 95 210, 115 215 C105 228, 98 234, 90 238 Z" fill="#92400e"/>
+  <path d="M310 238 C320 230, 305 210, 285 215 C295 228, 302 234, 310 238 Z" fill="#92400e"/>
+
+  <!-- Butter glaze shine -->
+  <path d="M175 190 Q200 182 225 190" stroke="#ffffff" stroke-width="3" stroke-linecap="round" opacity="0.6"/>
+
+  <!-- Flakes crumbs -->
+  <circle cx="120" cy="255" r="3" fill="#f59e0b"/>
+  <circle cx="280" cy="250" r="2.5" fill="#f59e0b"/>
+  <circle cx="260" cy="265" r="3.5" fill="#d97706"/>
+  <circle cx="150" cy="262" r="2" fill="#d97706"/>
+
+  <!-- Label Badge -->
+  <g transform="translate(200, 368)">
+    <rect x="-85" y="-14" width="170" height="26" rx="13" fill="#b45309" stroke="#f59e0b" stroke-width="1"/>
+    <text x="0" y="3" fill="#ffffff" font-family="system-ui, sans-serif" font-size="11" font-weight="900" text-anchor="middle" letter-spacing="1">FRENCH BUTTER CROISSANT</text>
+  </g>
+</svg>

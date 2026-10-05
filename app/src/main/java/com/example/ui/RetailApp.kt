@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ExitToApp
 import androidx.compose.material.icons.filled.CurrencyExchange
 import androidx.compose.material.icons.filled.NotificationsActive
 import androidx.compose.material.icons.filled.History
@@ -24,6 +25,7 @@ import androidx.compose.material.icons.filled.PersonPin
 import androidx.compose.material.icons.filled.PointOfSale
 import androidx.compose.material.icons.filled.QrCode
 import androidx.compose.material.icons.filled.ReceiptLong
+import androidx.compose.material.icons.filled.Send
 import androidx.compose.material.icons.filled.Shield
 import androidx.compose.material.icons.filled.Timeline
 import androidx.compose.material.icons.filled.Warning
@@ -63,8 +65,9 @@ import com.example.R
 import com.example.ui.clients.ClientsScreen
 import com.example.ui.components.CurrencySettingsDialog
 import com.example.ui.components.LowStockAlertSettingsDialog
+import com.example.ui.components.MenuQrCodeDialog
 import com.example.ui.components.SecureActivityLogView
-import com.example.ui.inventory.InventoryTrackingScreen
+import com.example.ui.components.TelegramSettingsDialog
 import com.example.ui.pos.PosScreen
 import com.example.ui.sales.SalesHistoryScreen
 import com.example.ui.stock.StockScreen
@@ -87,7 +90,6 @@ enum class RetailTab(
 ) {
     POS("POS", Icons.Filled.PointOfSale, "tab_pos"),
     STOCK("Stock", Icons.Filled.Inventory2, "tab_stock"),
-    TRACKING("Tracking", Icons.Filled.Timeline, "tab_tracking"),
     SALES("Sales", Icons.Filled.ReceiptLong, "tab_sales"),
     CLIENTS("Clients", Icons.Filled.PersonPin, "tab_clients"),
     USERS("Staff", Icons.Filled.People, "tab_users")
@@ -111,6 +113,11 @@ fun RetailApp(
 
     var showCurrencyDialog by remember { mutableStateOf(false) }
     var showLowStockDialog by remember { mutableStateOf(false) }
+    var showMenuQrDialog by remember { mutableStateOf(false) }
+    var showBakongSettingsDialog by remember { mutableStateOf(false) }
+    var showTelegramDialog by remember { mutableStateOf(false) }
+    var showLogoutDialog by remember { mutableStateOf(false) }
+    val isCurrentUserAdmin = currentUser?.role?.equals("ADMIN", ignoreCase = true) == true
 
     LaunchedEffect(toastMessage) {
         toastMessage?.let {
@@ -226,6 +233,132 @@ fun RetailApp(
                         }
                     }
 
+                    // Digital Menu QR Code Pill
+                    Surface(
+                        color = Color(0xFFFEF3C7),
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier
+                            .clickable { showMenuQrDialog = true }
+                            .padding(end = 6.dp)
+                            .testTag("qr_menu_pill")
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 5.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                Icons.Filled.QrCode,
+                                contentDescription = "Menu QR",
+                                tint = Color(0xFFB45309),
+                                modifier = Modifier.size(13.dp)
+                            )
+                            Spacer(modifier = Modifier.width(3.dp))
+                            Text(
+                                text = "QR Menu",
+                                color = Color(0xFF78350F),
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.ExtraBold
+                            )
+                        }
+                    }
+
+                    // Bakong Universal KHQR Pill (Setting & Counter Stand)
+                    Surface(
+                        color = Color(0xFFFEE2E2),
+                        shape = RoundedCornerShape(12.dp),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFFCA5A5)),
+                        modifier = Modifier
+                            .clickable { showBakongSettingsDialog = true }
+                            .padding(end = 6.dp)
+                            .testTag("bakong_settings_pill")
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 5.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(7.dp)
+                                    .clip(CircleShape)
+                                    .background(Color(0xFFDC2626))
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(
+                                text = "Bakong QR",
+                                color = Color(0xFFDC2626),
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.ExtraBold
+                            )
+                        }
+                    }
+
+                    // Telegram Alerts Pill (ONLY SHOWN IN ADMIN USER)
+                    if (isCurrentUserAdmin) {
+                        val telegramConfig by viewModel.telegramConfig.collectAsState()
+                        val adminTgHandle = currentUser?.telegram?.ifBlank { "@chandaranong" } ?: "@chandaranong"
+                        Surface(
+                            color = if (telegramConfig.isEnabled) Color(0xFFE0F2FE) else RetailSlate100,
+                            shape = RoundedCornerShape(12.dp),
+                            border = androidx.compose.foundation.BorderStroke(
+                                1.dp,
+                                if (telegramConfig.isEnabled) Color(0xFF7DD3FC) else RetailSlate300
+                            ),
+                            modifier = Modifier
+                                .clickable { showTelegramDialog = true }
+                                .padding(end = 6.dp)
+                                .testTag("telegram_settings_pill")
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 5.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(
+                                    Icons.Filled.Send,
+                                    contentDescription = "Telegram Alerts",
+                                    tint = if (telegramConfig.isEnabled) Color(0xFF0284C7) else RetailSlate500,
+                                    modifier = Modifier.size(12.dp)
+                                )
+                                Spacer(modifier = Modifier.width(3.dp))
+                                Text(
+                                    text = if (telegramConfig.isEnabled) adminTgHandle else "TG Off",
+                                    color = if (telegramConfig.isEnabled) Color(0xFF0369A1) else RetailSlate700,
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                        }
+
+                        // Log Out Action Button for Admin
+                        Surface(
+                            color = Color(0xFFFEE2E2),
+                            shape = RoundedCornerShape(12.dp),
+                            border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFFCA5A5)),
+                            modifier = Modifier
+                                .clickable { showLogoutDialog = true }
+                                .padding(end = 6.dp)
+                                .testTag("top_bar_logout_btn")
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 5.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(
+                                    Icons.AutoMirrored.Filled.ExitToApp,
+                                    contentDescription = "Log Out",
+                                    tint = Color(0xFFDC2626),
+                                    modifier = Modifier.size(12.dp)
+                                )
+                                Spacer(modifier = Modifier.width(3.dp))
+                                Text(
+                                    text = "Log Out",
+                                    color = Color(0xFFDC2626),
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                        }
+                    }
+
                     // Active Cashier Pill
                     Surface(
                         color = RetailSlate100,
@@ -320,7 +453,6 @@ fun RetailApp(
             when (currentTab) {
                 RetailTab.POS -> PosScreen(viewModel = viewModel)
                 RetailTab.STOCK -> StockScreen(viewModel = viewModel)
-                RetailTab.TRACKING -> InventoryTrackingScreen(viewModel = viewModel)
                 RetailTab.SALES -> SalesHistoryScreen(viewModel = viewModel)
                 RetailTab.CLIENTS -> ClientsScreen(viewModel = viewModel)
                 RetailTab.USERS -> UsersScreen(viewModel = viewModel)
@@ -342,6 +474,77 @@ fun RetailApp(
                 isMonitoringActive = isMonitoringActive,
                 currentThresholdOverride = thresholdOverride,
                 onDismiss = { showLowStockDialog = false }
+            )
+        }
+
+        if (showMenuQrDialog) {
+            MenuQrCodeDialog(
+                onDismiss = { showMenuQrDialog = false },
+                onShowToast = { msg -> viewModel.showToast(msg) }
+            )
+        }
+
+        if (showBakongSettingsDialog) {
+            com.example.ui.components.BakongSettingsDialog(
+                viewModel = viewModel,
+                onDismiss = { showBakongSettingsDialog = false }
+            )
+        }
+
+        if (showTelegramDialog && isCurrentUserAdmin) {
+            val telegramConfig by viewModel.telegramConfig.collectAsState()
+            TelegramSettingsDialog(
+                viewModel = viewModel,
+                config = telegramConfig,
+                onDismiss = { showTelegramDialog = false }
+            )
+        }
+
+        if (showLogoutDialog) {
+            androidx.compose.material3.AlertDialog(
+                onDismissRequest = { showLogoutDialog = false },
+                icon = {
+                    Icon(
+                        Icons.AutoMirrored.Filled.ExitToApp,
+                        contentDescription = null,
+                        tint = Color(0xFFDC2626),
+                        modifier = Modifier.size(28.dp)
+                    )
+                },
+                title = {
+                    Text(
+                        text = "Log Out of Admin?",
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 18.sp
+                    )
+                },
+                text = {
+                    Text(
+                        text = "Are you sure you want to log out of the Executive Admin session? You will return to standard Cashier mode.",
+                        fontSize = 14.sp,
+                        color = RetailSlate700
+                    )
+                },
+                confirmButton = {
+                    androidx.compose.material3.Button(
+                        onClick = {
+                            showLogoutDialog = false
+                            viewModel.logoutCurrentUser()
+                            currentTab = RetailTab.POS
+                        },
+                        colors = androidx.compose.material3.ButtonDefaults.buttonColors(containerColor = Color(0xFFDC2626)),
+                        modifier = Modifier.testTag("confirm_admin_logout_btn")
+                    ) {
+                        Text("Log Out", fontWeight = FontWeight.Bold)
+                    }
+                },
+                dismissButton = {
+                    androidx.compose.material3.OutlinedButton(
+                        onClick = { showLogoutDialog = false }
+                    ) {
+                        Text("Cancel")
+                    }
+                }
             )
         }
     }

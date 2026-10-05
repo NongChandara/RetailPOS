@@ -1,6 +1,6 @@
 {
   "name": "TR Store & Cafe",
   "description": "Multi-category store for Cosmetics, Coffee, and Services with online ordering, appointment booking, and loyalty points tracking.",
-  "requestFramePermissions": ["camera"],
+  "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

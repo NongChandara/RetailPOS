@@ -1,0 +1,43 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 400" width="100%" height="100%">
+  <defs>
+    <linearGradient id="bgMatcha" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0e2318"/>
+      <stop offset="100%" stop-color="#06120b"/>
+    </linearGradient>
+    <linearGradient id="matchaGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#2d6a4f"/>
+      <stop offset="45%" stop-color="#40916c"/>
+      <stop offset="75%" stop-color="#d8f3dc"/>
+      <stop offset="100%" stop-color="#ffffff"/>
+    </linearGradient>
+  </defs>
+
+  <rect width="400" height="400" rx="32" fill="url(#bgMatcha)"/>
+  <circle cx="200" cy="200" r="160" fill="none" stroke="#52b788" stroke-opacity="0.15" stroke-width="1.5"/>
+
+  <ellipse cx="200" cy="350" rx="65" ry="15" fill="#000000" opacity="0.65"/>
+
+  <!-- Glass Body -->
+  <path d="M140 100 L152 330 Q154 342 166 342 L234 342 Q246 342 248 330 L260 100 Z" fill="url(#matchaGrad)"/>
+
+  <!-- Ice cubes -->
+  <rect x="165" y="135" width="36" height="36" rx="7" fill="#ffffff" opacity="0.5" transform="rotate(15 183 153)"/>
+  <rect x="202" y="155" width="36" height="36" rx="7" fill="#ffffff" opacity="0.5" transform="rotate(-15 220 173)"/>
+
+  <!-- Frothy matcha top -->
+  <ellipse cx="200" cy="100" rx="60" ry="12" fill="#2d6a4f"/>
+  <ellipse cx="200" cy="100" rx="52" ry="9" fill="#52b788" opacity="0.8"/>
+
+  <!-- Glass reflections -->
+  <path d="M145 110 L155 325" stroke="#ffffff" stroke-width="4" stroke-linecap="round" opacity="0.45"/>
+  <ellipse cx="200" cy="98" rx="61" ry="11" fill="none" stroke="#ffffff" stroke-width="2" opacity="0.6"/>
+
+  <!-- Straw -->
+  <line x1="225" y1="50" x2="200" y2="280" stroke="#74c69d" stroke-width="7" stroke-linecap="round"/>
+
+  <!-- Label Badge -->
+  <g transform="translate(200, 368)">
+    <rect x="-85" y="-14" width="170" height="26" rx="13" fill="#2d6a4f" stroke="#74c69d" stroke-width="1"/>
+    <text x="0" y="3" fill="#ffffff" font-family="system-ui, sans-serif" font-size="11" font-weight="900" text-anchor="middle" letter-spacing="1">UJI MATCHA LATTE</text>
+  </g>
+</svg>

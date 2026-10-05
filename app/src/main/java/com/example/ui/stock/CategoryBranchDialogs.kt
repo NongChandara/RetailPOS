@@ -35,6 +35,11 @@ import androidx.compose.material.icons.filled.Phone
 import androidx.compose.material.icons.filled.ReceiptLong
 import androidx.compose.material.icons.filled.SpaceBar
 import androidx.compose.material.icons.filled.Storefront
+import androidx.compose.material.icons.filled.Visibility
+import androidx.compose.material.icons.filled.VisibilityOff
+import androidx.compose.material.icons.filled.Wifi
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -553,14 +558,19 @@ fun ManageBranchesDialog(
         receiptFooter: String,
         taxPercent: Double,
         receiptGap: Int,
-        setAsActive: Boolean
+        setAsActive: Boolean,
+        wifiName: String,
+        wifiPassword: String
     ) -> Unit)? = null,
-    onSetActiveBranch: ((BranchEntity) -> Unit)? = null
+    onSetActiveBranch: ((BranchEntity) -> Unit)? = null,
+    onUpdateBranchWifi: ((branch: BranchEntity, wifiName: String, wifiPassword: String) -> Unit)? = null
 ) {
     var newBranchName by remember { mutableStateOf("") }
     var newBranchCode by remember { mutableStateOf("") }
     var newBranchAddress by remember { mutableStateOf("") }
     var newBranchPhone by remember { mutableStateOf("") }
+    var newBranchWifiName by remember { mutableStateOf("") }
+    var newBranchWifiPassword by remember { mutableStateOf("trcoffee2026") }
     var branchToEdit by remember { mutableStateOf<BranchEntity?>(null) }
     var branchToDelete by remember { mutableStateOf<BranchEntity?>(null) }
     var branchForReceiptConfig by remember { mutableStateOf<BranchEntity?>(null) }
@@ -674,6 +684,27 @@ fun ManageBranchesDialog(
                                 modifier = Modifier.weight(1f)
                             )
                         }
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            OutlinedTextField(
+                                value = newBranchWifiName,
+                                onValueChange = { newBranchWifiName = it },
+                                label = { Text("Wi-Fi SSID (Name)") },
+                                placeholder = { Text("e.g. TR_Store_Guest") },
+                                singleLine = true,
+                                shape = RoundedCornerShape(8.dp),
+                                modifier = Modifier.weight(1f)
+                            )
+                            OutlinedTextField(
+                                value = newBranchWifiPassword,
+                                onValueChange = { newBranchWifiPassword = it },
+                                label = { Text("Wi-Fi Password") },
+                                placeholder = { Text("e.g. trcoffee2026") },
+                                singleLine = true,
+                                shape = RoundedCornerShape(8.dp),
+                                modifier = Modifier.weight(1f)
+                            )
+                        }
                         Spacer(modifier = Modifier.height(8.dp))
                         Button(
                             onClick = {
@@ -756,8 +787,9 @@ fun ManageBranchesDialog(
             activeBranch = activeBranch,
             initialBranch = targetBranch,
             onDismiss = { branchForReceiptConfig = null },
-            onSaveBranchReceipt = { branch, header, subtitle, vatTin, addr, phone, footer, taxPct, gap, setAsActive ->
-                onUpdateBranchReceiptConfig?.invoke(branch, header, subtitle, vatTin, addr, phone, footer, taxPct, gap, setAsActive)
+            onSaveBranchReceipt = { branch, header, subtitle, vatTin, addr, phone, footer, taxPct, gap, setAsActive, wifiName, wifiPassword ->
+                onUpdateBranchReceiptConfig?.invoke(branch, header, subtitle, vatTin, addr, phone, footer, taxPct, gap, setAsActive, wifiName, wifiPassword)
+                onUpdateBranchWifi?.invoke(branch, wifiName, wifiPassword)
                 branchForReceiptConfig = null
             },
             onSetActiveBranch = { b ->
@@ -777,7 +809,8 @@ fun ManageBranchesDialog(
             },
             onSaveWithReceipt = { b, newName, newCode, newAddr, newPhone, isMain, header, subtitle, vatTin, footer, taxPct, gap ->
                 onEditBranch(b, newName, newCode, newAddr, newPhone, isMain)
-                onUpdateBranchReceiptConfig?.invoke(b, header, subtitle, vatTin, newAddr, newPhone, footer, taxPct, gap, false)
+                onUpdateBranchReceiptConfig?.invoke(b, header, subtitle, vatTin, newAddr, newPhone, footer, taxPct, gap, false, b.wifiName, b.wifiPassword)
+                onUpdateBranchWifi?.invoke(b, b.wifiName, b.wifiPassword)
                 branchToEdit = null
             }
         )
@@ -934,6 +967,30 @@ private fun BranchRowItem(
                             modifier = Modifier.padding(horizontal = 5.dp, vertical = 1.dp)
                         )
                     }
+                    Surface(
+                        color = Color(0xFFF0FDFA),
+                        shape = RoundedCornerShape(4.dp),
+                        border = androidx.compose.foundation.BorderStroke(0.5.dp, Color(0xFF99F6E4))
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.padding(horizontal = 5.dp, vertical = 1.dp)
+                        ) {
+                            Icon(
+                                Icons.Filled.Wifi,
+                                contentDescription = "Wi-Fi",
+                                tint = RetailTealPrimary,
+                                modifier = Modifier.size(10.dp)
+                            )
+                            Spacer(modifier = Modifier.width(3.dp))
+                            Text(
+                                text = "${branch.wifiName.ifBlank { "TR_Guest" }} (${branch.wifiPassword.ifBlank { "trcoffee2026" }})",
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color(0xFF0F766E)
+                            )
+                        }
+                    }
                 }
             }
 
@@ -1011,6 +1068,9 @@ fun EditBranchDialog(
     var receiptFooter by remember { mutableStateOf(branch.receiptFooter) }
     var taxPercentText by remember { mutableStateOf(String.format(Locale.US, "%.1f", branch.taxPercent).removeSuffix(".0")) }
     var receiptGap by remember { mutableIntStateOf(branch.receiptGap) }
+    var wifiName by remember { mutableStateOf(branch.wifiName) }
+    var wifiPassword by remember { mutableStateOf(branch.wifiPassword) }
+    var showWifiPass by remember { mutableStateOf(false) }
 
     Dialog(onDismissRequest = onDismiss) {
         Surface(
@@ -1138,6 +1198,49 @@ fun EditBranchDialog(
                     modifier = Modifier.fillMaxWidth()
                 )
 
+                HorizontalDivider(color = RetailSlate100, modifier = Modifier.padding(vertical = 4.dp))
+
+                Text(
+                    text = "Customer Free Wi-Fi Access Credentials",
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 13.sp,
+                    color = RetailSlate900
+                )
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    OutlinedTextField(
+                        value = wifiName,
+                        onValueChange = { wifiName = it },
+                        label = { Text("Wi-Fi Name (SSID)") },
+                        placeholder = { Text("e.g. TR_Store_Guest") },
+                        singleLine = true,
+                        shape = RoundedCornerShape(8.dp),
+                        modifier = Modifier.weight(1f).testTag("edit_branch_wifi_name")
+                    )
+                    OutlinedTextField(
+                        value = wifiPassword,
+                        onValueChange = { wifiPassword = it },
+                        label = { Text("Wi-Fi Password") },
+                        placeholder = { Text("e.g. trcoffee2026") },
+                        singleLine = true,
+                        visualTransformation = if (showWifiPass) VisualTransformation.None else PasswordVisualTransformation(),
+                        trailingIcon = {
+                            IconButton(onClick = { showWifiPass = !showWifiPass }) {
+                                Icon(
+                                    if (showWifiPass) Icons.Filled.VisibilityOff else Icons.Filled.Visibility,
+                                    contentDescription = "Toggle password visibility",
+                                    modifier = Modifier.size(18.dp)
+                                )
+                            }
+                        },
+                        shape = RoundedCornerShape(8.dp),
+                        modifier = Modifier.weight(1f).testTag("edit_branch_wifi_pass")
+                    )
+                }
+
                 Row(
                     modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
                     horizontalArrangement = Arrangement.End
@@ -1150,9 +1253,13 @@ fun EditBranchDialog(
                         onClick = {
                             if (name.isNotBlank()) {
                                 val parsedTax = taxPercentText.toDoubleOrNull() ?: branch.taxPercent
+                                val updatedBranch = branch.copy(
+                                    wifiName = wifiName.trim().ifBlank { "TR_Store_Guest" },
+                                    wifiPassword = wifiPassword.trim().ifBlank { "trcoffee2026" }
+                                )
                                 if (onSaveWithReceipt != null) {
                                     onSaveWithReceipt(
-                                        branch,
+                                        updatedBranch,
                                         name.trim(),
                                         code.trim(),
                                         address.trim(),

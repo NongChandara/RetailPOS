@@ -127,6 +127,9 @@ interface SaleDao {
     @Query("SELECT * FROM sale_items WHERE saleId = :saleId ORDER BY id ASC")
     suspend fun getSaleItemsList(saleId: Long): List<SaleItemEntity>
 
+    @Query("SELECT * FROM sale_items ORDER BY id DESC")
+    fun getAllSaleItems(): Flow<List<SaleItemEntity>>
+
     @Query("SELECT COUNT(*) FROM sales")
     suspend fun countSales(): Int
 }
