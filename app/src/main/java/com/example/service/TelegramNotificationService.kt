@@ -104,11 +104,11 @@ class TelegramNotificationService(private val context: Context) {
                 }
 
                 val testMsg = """
-                    ☕ <b>TR COFFEE & CAFE • TELEGRAM ALERT TEST</b>
+                    ☕ <b>TR COFFEE &amp; CAFE • TELEGRAM ALERT TEST</b>
                     ━━━━━━━━━━━━━━━━━━━━━━
                     ✅ <b>Status:</b> Telegram Bot Connected Successfully!
                     🕒 <b>Timestamp:</b> ${SimpleDateFormat("dd/MM/yyyy hh:mm:ss a", Locale.US).format(Date())}
-                    🏪 <b>Store:</b> TR Coffee & Cosmetics Flagship
+                    🏪 <b>Store:</b> TR Coffee &amp; Cosmetics Flagship
                     📱 <b>Alert Channel:</b> $chatId
                     ━━━━━━━━━━━━━━━━━━━━━━
                     🎉 Real-time transaction notifications are configured and active.
@@ -126,11 +126,18 @@ class TelegramNotificationService(private val context: Context) {
         }
     }
 
+    private fun escapeHtml(text: String): String {
+        return text
+            .replace("&", "&amp;")
+            .replace("<", "&lt;")
+            .replace(">", "&gt;")
+    }
+
     private fun executeSendMessage(token: String, chatId: String, htmlText: String): Pair<Boolean, String> {
         val url = "https://api.telegram.org/bot$token/sendMessage"
 
         val json = JSONObject().apply {
-            put("chat_id", chatId)
+            put("chat_id", chatId.trim())
             put("text", htmlText)
             put("parse_mode", "HTML")
             put("disable_web_page_preview", true)
@@ -150,6 +157,29 @@ class TelegramNotificationService(private val context: Context) {
                     Pair(true, "Success")
                 } else {
                     Log.e(TAG, "Telegram API error: Code ${response.code}, Body: $body")
+                    // If HTML entity parsing fails, retry with plain text (strip tags) as fallback
+                    if (body.contains("can't parse entities", ignoreCase = true) || response.code == 400) {
+                        Log.w(TAG, "Retrying Telegram send as plain text without HTML parse_mode...")
+                        val plainText = htmlText.replace(Regex("<[^>]*>"), "")
+                        val fallbackJson = JSONObject().apply {
+                            put("chat_id", chatId.trim())
+                            put("text", plainText)
+                            put("disable_web_page_preview", true)
+                        }
+                        val fallbackBody = fallbackJson.toString().toRequestBody("application/json; charset=utf-8".toMediaType())
+                        val fallbackReq = Request.Builder().url(url).post(fallbackBody).build()
+                        try {
+                            client.newCall(fallbackReq).execute().use { fallbackResp ->
+                                if (fallbackResp.isSuccessful) {
+                                    Log.i(TAG, "Telegram notification delivered via plain text fallback to $chatId")
+                                    return Pair(true, "Success (plain-text fallback)")
+                                }
+                            }
+                        } catch (ex: Exception) {
+                            Log.e(TAG, "Fallback plain text send also failed: ${ex.message}")
+                        }
+                    }
+
                     val errDesc = try {
                         JSONObject(body).optString("description", "HTTP ${response.code}")
                     } catch (_: Exception) {
@@ -178,7 +208,8 @@ class TelegramNotificationService(private val context: Context) {
             items.joinToString("\n") { item ->
                 val itemPrice = String.format(Locale.US, "%.2f", item.unitPrice)
                 val itemTotal = String.format(Locale.US, "%.2f", item.itemTotal)
-                "• <b>${item.productName}</b> x${item.quantity}  ($$itemPrice) = <b>$$itemTotal</b>"
+                val safeName = escapeHtml(item.productName)
+                "• <b>$safeName</b> x${item.quantity}  ($$itemPrice) = <b>$$itemTotal</b>"
             }
         } else {
             "• <i>Standard Sale Transaction</i>"
@@ -187,7 +218,7 @@ class TelegramNotificationService(private val context: Context) {
         val paymentBadge = when (sale.paymentMethod.uppercase()) {
             "KHQR" -> "🔴 <b>Bakong Universal KHQR</b>"
             "CASH" -> "💵 <b>Cash</b>"
-            else -> "💳 <b>${sale.paymentMethod}</b>"
+            else -> "💳 <b>${escapeHtml(sale.paymentMethod)}</b>"
         }
 
         val tenderInfo = if (sale.paymentMethod.equals("CASH", ignoreCase = true) && sale.amountTendered > 0) {
@@ -203,18 +234,22 @@ class TelegramNotificationService(private val context: Context) {
         }
 
         val notesInfo = if (!sale.notes.isNullOrBlank()) {
-            "\n📝 <b>Notes:</b> ${sale.notes}"
+            "\n📝 <b>Notes:</b> ${escapeHtml(sale.notes)}"
         } else {
             ""
         }
 
+        val safeReceipt = escapeHtml(sale.receiptNumber)
+        val safeBranch = escapeHtml(sale.branchName)
+        val safeCashier = escapeHtml(sale.cashierName)
+
         return """
-            ☕ <b>NEW TRANSACTION • TR COFFEE & CAFE</b>
+            ☕ <b>NEW TRANSACTION • TR COFFEE &amp; CAFE</b> 🇰🇭
             ━━━━━━━━━━━━━━━━━━━━━━
-            🧾 <b>Receipt:</b> <code>${sale.receiptNumber}</code>
+            🧾 <b>Receipt:</b> <code>$safeReceipt</code>
             📅 <b>Date:</b> $dateFormatted
-            🏪 <b>Branch:</b> ${sale.branchName}
-            👨‍💼 <b>Cashier:</b> ${sale.cashierName}
+            🏪 <b>Branch:</b> $safeBranch
+            👨‍💼 <b>Cashier:</b> $safeCashier
             💳 <b>Payment:</b> $paymentBadge$tenderInfo
             ━━━━━━━━━━━━━━━━━━━━━━
             🛒 <b>Items Sold (${sale.itemsCount}):</b>

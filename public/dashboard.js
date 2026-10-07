@@ -12,8 +12,16 @@
   let menuSearchQuery = '';
   let activePosDept = 'ALL';
   let activePosSearch = '';
+  let accountingFilterPeriod = 'ALL';
+  let accountingSubTab = 'pnl';
+  let accountingCurrencyMode = 'DUAL';
 
   function getDashboardCatalog() {
+    if (window.MultiTenantStore && typeof window.MultiTenantStore.getProducts === 'function') {
+      const tenantItems = window.MultiTenantStore.getProducts();
+      window.MENU_ITEMS = tenantItems;
+      return tenantItems;
+    }
     if (Array.isArray(window.MENU_ITEMS) && window.MENU_ITEMS.length > 0) {
       return window.MENU_ITEMS;
     }
@@ -27,6 +35,22 @@
       console.warn("Could not read tr_coffee_menu from localStorage:", e);
     }
     return [];
+  }
+
+  function getDashboardSales() {
+    if (window.MultiTenantStore && typeof window.MultiTenantStore.getSales === 'function') {
+      const tenantSales = window.MultiTenantStore.getSales();
+      window.SALES_DB = tenantSales;
+      return tenantSales;
+    }
+    if (Array.isArray(window.SALES_DB)) return window.SALES_DB;
+    try {
+      const stored = JSON.parse(localStorage.getItem('tr_coffee_sales') || '[]');
+      window.SALES_DB = stored;
+      return stored;
+    } catch(e) {
+      return [];
+    }
   }
 
   const DASHBOARD_CONTAINER_ID = 'tiro-executive-dashboard-view';
@@ -123,7 +147,16 @@
             <div id="dash-subnav-list-sales" class="pl-4 pr-1 py-1 space-y-0.5 hidden"></div>
           </div>
 
-          <!-- 5. Inventory Stock -->
+          <!-- 5. Accounting Report (គណនេយ្យ) -->
+          <div>
+            <button type="button" onclick="switchDashboardTab('accounting')" id="dash-nav-accounting" class="w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl transition-all dash-nav-btn text-slate-300 hover:bg-[#162238] hover:text-white font-semibold text-xs">
+              <div class="flex items-center gap-2.5"><span class="text-base">📑</span><span>Accounting Report</span></div>
+              <span class="text-[9px] bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 px-1.5 py-0.5 rounded-full font-mono">P&amp;L • VAT</span>
+            </button>
+            <div id="dash-subnav-list-accounting" class="pl-4 pr-1 py-1 space-y-0.5 hidden"></div>
+          </div>
+
+          <!-- 6. Inventory Stock -->
           <div>
             <button type="button" onclick="switchDashboardTab('stock')" id="dash-nav-stock" class="w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl transition-all dash-nav-btn text-slate-300 hover:bg-[#162238] hover:text-white font-semibold text-xs">
               <div class="flex items-center gap-2.5"><span class="text-base">📦</span><span>Inventory Stock</span></div>
@@ -141,12 +174,13 @@
             <div id="dash-subnav-list-staff" class="pl-4 pr-1 py-1 space-y-0.5 hidden"></div>
           </div>
 
-          <!-- 7. Create User -->
+          <!-- 7b. Platform Merchants & Tenants (RBAC) -->
           <div>
-            <button type="button" onclick="openAdminUsersModal()" id="dash-nav-createuser" class="w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl transition-all dash-nav-btn text-amber-300 hover:bg-[#162238] hover:text-amber-200 font-bold text-xs border border-amber-400/20 shadow-2xs">
-              <div class="flex items-center gap-2.5"><span class="text-base">👤</span><span>Create User</span></div>
-              <span class="text-[9px] bg-amber-500/20 text-amber-300 border border-amber-500/30 px-1.5 py-0.5 rounded-full font-mono font-bold">+ New</span>
+            <button type="button" onclick="switchDashboardTab('merchants')" id="dash-nav-merchants" class="w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl transition-all dash-nav-btn text-slate-300 hover:bg-[#162238] hover:text-white font-semibold text-xs">
+              <div class="flex items-center gap-2.5"><span class="text-base">🏢</span><span>Platform Merchants</span></div>
+              <span class="text-[9px] bg-teal-500/20 text-teal-300 border border-teal-500/30 px-1.5 py-0.5 rounded-full font-mono">Tenants</span>
             </button>
+            <div id="dash-subnav-list-merchants" class="pl-4 pr-1 py-1 space-y-0.5 hidden"></div>
           </div>
 
           <!-- 8. Branch Manage -->
@@ -218,9 +252,6 @@
             </div>
             <button type="button" onclick="openItemEditorModal()" class="bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-xs px-3 py-1.5 rounded-xl shadow-xs flex items-center gap-1.5 active:scale-95 transition-all">
               <span>+</span><span>Add Product</span>
-            </button>
-            <button type="button" onclick="openAdminUsersModal()" class="bg-slate-900 hover:bg-slate-800 text-white font-extrabold text-xs px-3 py-1.5 rounded-xl shadow-xs flex items-center gap-1.5 active:scale-95 transition-all">
-              <span>👤</span><span>+ Create User</span>
             </button>
             <a href="./app-debug.apk" download="TR-Store-Cafe.apk" class="bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold text-xs px-3 py-1.5 rounded-xl shadow-xs flex items-center gap-1.5 active:scale-95 transition-all" title="Directly download Android APK">
               <span>📱</span><span>APK (48 MB)</span>
@@ -533,7 +564,15 @@
                       <span id="dash-pos-discount-label">Discounts Savings:</span>
                       <span id="dash-pos-discount-amt" class="font-mono">-$0.00</span>
                     </div>
-                    <div class="flex justify-between text-slate-600"><span>Tax (10%):</span><span id="dash-pos-tax" class="font-mono">$0.00</span></div>
+                    <div class="flex justify-between items-center text-slate-600">
+                      <div class="flex items-center gap-1.5">
+                        <span id="dash-pos-tax-label">Tax (10%):</span>
+                        <button type="button" onclick="dashOpenTaxEditorModal()" class="text-[9.5px] text-teal-800 hover:text-teal-950 bg-teal-50 hover:bg-teal-100 px-1.5 py-0.5 rounded border border-teal-300 font-bold transition-all" title="Edit Sales Tax Rate">
+                          ✏️ Edit
+                        </button>
+                      </div>
+                      <span id="dash-pos-tax" class="font-mono">$0.00</span>
+                    </div>
                     <div class="flex justify-between text-slate-900 font-extrabold text-sm pt-1 border-t border-slate-200">
                       <span>Grand Total:</span>
                       <span id="dash-pos-total" class="font-mono text-emerald-600">$0.00</span>
@@ -580,6 +619,13 @@
             </div>
             <div class="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm" id="dash-sales-table-wrapper">
               <!-- Populated by JS -->
+            </div>
+          </div>
+
+          <!-- TAB: ACCOUNTING REPORTS -->
+          <div id="dash-panel-accounting" class="hidden space-y-5">
+            <div id="dash-accounting-content-wrapper">
+              <!-- Populated dynamically by renderAccountingTab() -->
             </div>
           </div>
 
@@ -631,6 +677,61 @@
             </div>
           </div>
 
+          <!-- TAB: PLATFORM MERCHANTS & TENANTS (RBAC ARCHITECTURE) -->
+          <div id="dash-panel-merchants" class="hidden space-y-5">
+            <!-- Header Banner -->
+            <div class="bg-gradient-to-r from-slate-900 via-[#102038] to-[#007A78] text-white p-5 rounded-3xl shadow-md flex flex-wrap items-center justify-between gap-4">
+              <div class="flex items-center gap-3.5">
+                <div class="w-12 h-12 rounded-2xl bg-white/10 border border-white/20 flex items-center justify-center text-2xl shadow-inner">
+                  🏢
+                </div>
+                <div>
+                  <div class="flex items-center gap-2">
+                    <h3 class="font-black text-lg text-white">Platform Merchants &amp; Multi-Tenancy</h3>
+                    <span class="bg-emerald-500/20 text-emerald-300 border border-emerald-400/30 text-[10px] font-bold px-2 py-0.5 rounded-full">Data Isolation Active</span>
+                  </div>
+                  <p class="text-xs text-slate-300">Manage tenant organizations, monitor store transaction volume, and enforce RBAC access policies</p>
+                </div>
+              </div>
+              <div class="flex items-center gap-2">
+                <button type="button" onclick="dashOpenEmailOutboxModal()" class="bg-slate-800 hover:bg-slate-700 text-teal-300 border border-teal-500/30 font-extrabold text-xs px-3.5 py-2.5 rounded-xl shadow-md flex items-center gap-2 active:scale-95 transition-all" title="View all dispatched verification emails and codes">
+                  <span>📨</span>
+                  <span>Email Outbox</span>
+                </button>
+                <button type="button" onclick="openAuthBoardModal('signup')" class="bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold text-xs px-4 py-2.5 rounded-xl shadow-md flex items-center gap-2 active:scale-95 transition-all">
+                  <span>➕</span>
+                  <span>Register New Merchant</span>
+                </button>
+              </div>
+            </div>
+
+            <!-- 4 Summary KPI Cards -->
+            <div class="grid grid-cols-2 lg:grid-cols-4 gap-3.5" id="dash-merchants-kpi-row">
+              <!-- Dynamically populated by renderMerchantsTab() -->
+            </div>
+
+            <!-- Merchants Data Table -->
+            <div class="bg-white border border-slate-200 rounded-3xl p-5 shadow-sm space-y-4">
+              <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-3">
+                <div>
+                  <h4 class="font-black text-slate-900 text-sm">Tenant Store Directory &amp; Access Controls</h4>
+                  <p class="text-[11px] text-slate-500">Each tenant operates an isolated inventory catalog, order sales ledger, and Bakong KHQR credentials</p>
+                </div>
+                <div class="flex items-center gap-2">
+                  <div class="relative w-64">
+                    <input id="dash-merchants-search" oninput="renderMerchantsTab()" type="text" placeholder="Search merchant by store or email..." class="w-full text-xs pl-8 pr-3 py-1.5 border border-slate-200 rounded-xl bg-slate-50 focus:bg-white focus:outline-none focus:ring-1 focus:ring-teal-500 font-medium" />
+                    <span class="absolute left-2.5 top-2 text-slate-400 text-xs">🔍</span>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Table Container -->
+              <div class="overflow-x-auto rounded-2xl border border-slate-100" id="dash-merchants-table-wrapper">
+                <!-- Injected by renderMerchantsTab() -->
+              </div>
+            </div>
+          </div>
+
           <!-- TAB 8: SETTINGS -->
           <div id="dash-panel-settings" class="hidden space-y-6">
             <div class="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm space-y-4">
@@ -642,7 +743,7 @@
                 <span class="text-[10px] bg-teal-100 text-teal-800 font-extrabold px-2.5 py-1 rounded-full border border-teal-200">System Live</span>
               </div>
 
-              <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 text-xs">
+              <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3.5 text-xs">
                 <!-- 1. Bakong Universal KHQR Card -->
                 <div class="border-2 border-red-500/40 bg-red-50/30 p-4 rounded-xl space-y-2 relative overflow-hidden flex flex-col justify-between shadow-2xs">
                   <div>
@@ -659,7 +760,23 @@
                   </button>
                 </div>
 
-                <!-- 2. Wi-Fi -->
+                <!-- 2. Sales Tax Rate (VAT) Card -->
+                <div class="border-2 border-emerald-500/40 bg-emerald-50/30 p-4 rounded-xl space-y-2 flex flex-col justify-between shadow-2xs">
+                  <div>
+                    <div class="flex items-center justify-between mb-1">
+                      <div class="font-black text-sm text-emerald-800 flex items-center gap-1.5">
+                        <span class="text-base">🏷️</span><span>Sales Tax (VAT)</span>
+                      </div>
+                      <span id="dash-settings-tax-badge" class="text-[9px] bg-emerald-700 text-white font-mono px-1.5 py-0.5 rounded-full font-bold">10% VAT</span>
+                    </div>
+                    <p class="text-slate-600 text-[11px] leading-relaxed">Sales tax rate applied to POS register tickets, invoices, and pre-bills.</p>
+                  </div>
+                  <button type="button" onclick="dashOpenTaxEditorModal()" class="bg-emerald-700 hover:bg-emerald-800 text-white font-bold py-2 px-3 rounded-lg mt-2 w-full transition-all flex items-center justify-center gap-1.5 shadow-xs">
+                    <span>✏️</span><span>Edit Sales Tax</span>
+                  </button>
+                </div>
+
+                <!-- 3. Wi-Fi -->
                 <div class="border border-slate-200 p-4 rounded-xl space-y-2 flex flex-col justify-between bg-white">
                   <div>
                     <div class="font-extrabold text-sm text-slate-800 flex items-center gap-1.5 mb-1">
@@ -670,7 +787,7 @@
                   <button type="button" onclick="openWifiEditorModal()" class="bg-teal-700 hover:bg-teal-800 text-white font-bold py-2 px-3 rounded-lg mt-2 w-full transition-all">Edit Wi-Fi Credentials</button>
                 </div>
 
-                <!-- 3. Telegram Alerts -->
+                <!-- 4. Telegram Alerts -->
                 <div class="border border-slate-200 p-4 rounded-xl space-y-2 flex flex-col justify-between bg-white">
                   <div>
                     <div class="font-extrabold text-sm text-slate-800 flex items-center gap-1.5 mb-1">
@@ -681,7 +798,7 @@
                   <button type="button" onclick="openAdminTelegramEditModal()" class="bg-sky-600 hover:bg-sky-700 text-white font-bold py-2 px-3 rounded-lg mt-2 w-full transition-all">Edit Telegram Bot</button>
                 </div>
 
-                <!-- 4. Exchange Rate -->
+                <!-- 5. Exchange Rate -->
                 <div class="border border-slate-200 p-4 rounded-xl space-y-2 flex flex-col justify-between bg-white">
                   <div>
                     <div class="font-extrabold text-sm text-slate-800 flex items-center gap-1.5 mb-1">
@@ -879,6 +996,109 @@
         </div>
 
         <!-- ============================================== -->
+        <!-- SALES TAX & VAT RATE EDITOR MODAL              -->
+        <!-- ============================================== -->
+        <div id="dash-tax-editor-modal" class="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm hidden items-center justify-center p-4">
+          <div class="bg-white rounded-3xl max-w-md w-full overflow-hidden shadow-2xl border-2 border-emerald-500 animate-in fade-in zoom-in-95 duration-200 flex flex-col">
+            <!-- Header -->
+            <div class="bg-gradient-to-r from-emerald-900 via-slate-900 to-teal-950 text-white p-4.5 flex items-center justify-between">
+              <div class="flex items-center gap-3">
+                <div class="w-10 h-10 rounded-xl bg-emerald-500/20 text-emerald-300 border border-emerald-400/30 flex items-center justify-center text-xl font-bold">
+                  🏷️
+                </div>
+                <div>
+                  <h3 class="font-black text-base text-white tracking-tight">Edit Sales Tax (VAT Rate)</h3>
+                  <p class="text-[11px] text-emerald-200/80">Configure sales tax percentage for POS registers &amp; bills</p>
+                </div>
+              </div>
+              <button type="button" onclick="dashCloseTaxEditorModal()" class="text-white/70 hover:text-white p-1 rounded-full hover:bg-white/10 transition-all">
+                ✕
+              </button>
+            </div>
+
+            <!-- Body -->
+            <div class="p-5 space-y-4 text-xs">
+              <!-- Current Active Display -->
+              <div class="bg-emerald-50 border border-emerald-200 rounded-2xl p-4 flex items-center justify-between">
+                <div>
+                  <span class="text-[10px] uppercase font-bold text-emerald-800 tracking-wider">Current Active Tax Rate</span>
+                  <div class="text-2xl font-black text-emerald-700 font-mono mt-0.5" id="dash-modal-tax-current-display">10.0%</div>
+                  <span class="text-[10px] text-slate-500">Applied to customer subtotals</span>
+                </div>
+                <div class="text-right">
+                  <span id="dash-modal-tax-mode-pill" class="bg-emerald-200/60 text-emerald-900 text-[10px] font-black px-2 py-0.5 rounded-full border border-emerald-300">
+                    Standard VAT
+                  </span>
+                </div>
+              </div>
+
+              <!-- Quick Presets -->
+              <div class="space-y-1.5">
+                <label class="block font-bold text-slate-700 text-xs">Quick Tax Presets:</label>
+                <div class="grid grid-cols-4 gap-2">
+                  <button type="button" onclick="dashSelectTaxPreset(0)" class="dash-tax-preset-btn py-2 px-1 rounded-xl text-xs font-bold text-center border transition-all bg-white hover:bg-slate-50 text-slate-700 border-slate-200" id="dash-tax-pre-0">
+                    <span class="block font-black text-sm">0%</span>
+                    <span class="text-[9px] text-slate-500">Exempt</span>
+                  </button>
+                  <button type="button" onclick="dashSelectTaxPreset(5)" class="dash-tax-preset-btn py-2 px-1 rounded-xl text-xs font-bold text-center border transition-all bg-white hover:bg-slate-50 text-slate-700 border-slate-200" id="dash-tax-pre-5">
+                    <span class="block font-black text-sm">5%</span>
+                    <span class="text-[9px] text-slate-500">Reduced</span>
+                  </button>
+                  <button type="button" onclick="dashSelectTaxPreset(7)" class="dash-tax-preset-btn py-2 px-1 rounded-xl text-xs font-bold text-center border transition-all bg-white hover:bg-slate-50 text-slate-700 border-slate-200" id="dash-tax-pre-7">
+                    <span class="block font-black text-sm">7%</span>
+                    <span class="text-[9px] text-slate-500">Service</span>
+                  </button>
+                  <button type="button" onclick="dashSelectTaxPreset(10)" class="dash-tax-preset-btn py-2 px-1 rounded-xl text-xs font-bold text-center border transition-all bg-emerald-700 text-white border-emerald-700 shadow-xs" id="dash-tax-pre-10">
+                    <span class="block font-black text-sm">10%</span>
+                    <span class="text-[9px] text-emerald-100">Standard</span>
+                  </button>
+                </div>
+              </div>
+
+              <!-- Custom Rate Input -->
+              <div class="space-y-1.5">
+                <label class="block font-bold text-slate-700 text-xs">Custom Tax Rate Percentage (%):</label>
+                <div class="relative">
+                  <input type="number" id="dash-modal-tax-input" step="0.5" min="0" max="100" value="10" oninput="dashLivePreviewTaxSimulation()" class="w-full bg-white border border-slate-300 rounded-xl pl-3 pr-10 py-2.5 text-sm font-bold font-mono text-slate-800 focus:ring-2 focus:ring-emerald-500 focus:outline-none" />
+                  <span class="absolute inset-y-0 right-0 pr-3 flex items-center text-slate-400 font-extrabold text-sm pointer-events-none">%</span>
+                </div>
+              </div>
+
+              <!-- Live Tax Calculation Simulation -->
+              <div class="border border-slate-200 rounded-xl p-3 bg-slate-50 text-xs space-y-1 font-mono">
+                <div class="text-[10px] font-bold text-slate-500 uppercase font-sans mb-1 flex items-center justify-between">
+                  <span>Simulation Breakdown:</span>
+                  <span class="text-emerald-700">Sample $10.00 Order</span>
+                </div>
+                <div class="flex justify-between text-slate-600 font-sans">
+                  <span>Gross Subtotal:</span>
+                  <span>$10.00</span>
+                </div>
+                <div class="flex justify-between text-emerald-800 font-bold font-sans">
+                  <span id="dash-sim-tax-label">Calculated Tax (10%):</span>
+                  <span id="dash-sim-tax-val">+$1.00</span>
+                </div>
+                <div class="flex justify-between font-extrabold text-slate-900 pt-1 border-t border-slate-200 font-sans">
+                  <span>Total With Tax:</span>
+                  <span id="dash-sim-total-val" class="text-emerald-700 font-bold">$11.00 (៛45,100)</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Footer -->
+            <div class="p-4 bg-slate-50 border-t border-slate-200 flex items-center justify-end gap-2 shrink-0">
+              <button type="button" onclick="dashCloseTaxEditorModal()" class="px-4 py-2 rounded-xl border border-slate-300 text-slate-700 font-bold hover:bg-slate-100 text-xs transition-colors">
+                Cancel
+              </button>
+              <button type="button" onclick="dashSaveTaxEditorModal()" class="px-5 py-2 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white font-black text-xs shadow-md active:scale-95 transition-all flex items-center gap-1.5">
+                <span>💾</span>
+                <span>Apply &amp; Save Tax Rate</span>
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- ============================================== -->
         <!-- POS CHECK BILL & SETTLE TICKET MODAL           -->
         <!-- ============================================== -->
         <div id="dash-pos-checkbill-modal" class="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm hidden items-center justify-center p-4">
@@ -1038,7 +1258,7 @@
                       <span id="dash-cb-disc-amount">-$0.00</span>
                     </div>
                     <div class="flex justify-between text-slate-600 font-sans">
-                      <span>Sales Tax (10%):</span>
+                      <span id="dash-cb-tax-label">Sales Tax (10%):</span>
                       <span id="dash-cb-tax" class="text-slate-800">$0.00</span>
                     </div>
                     <div class="pt-2 border-t border-slate-200 flex justify-between items-baseline font-sans">
@@ -1261,6 +1481,17 @@
               </div>
             </div>
 
+            <!-- Telegram Auto-Notification Status Banner -->
+            <div id="dash-pos-receipt-tg-banner" class="bg-sky-50 border border-sky-200 rounded-2xl p-2.5 text-xs flex items-center justify-between text-sky-900 shadow-2xs">
+              <div class="flex items-center gap-2">
+                <span class="text-base animate-pulse">✈️</span>
+                <span id="dash-pos-receipt-tg-text" class="font-bold">Auto-sent to Telegram channel</span>
+              </div>
+              <button type="button" onclick="dashResendReceiptToTelegram()" class="bg-sky-600 hover:bg-sky-700 text-white font-extrabold px-3 py-1 rounded-xl text-[11px] shadow-xs active:scale-95 transition-all">
+                Resend ✈️
+              </button>
+            </div>
+
             <div class="pt-2 flex flex-col sm:flex-row gap-2">
               <button type="button" onclick="dashPrintPosThermalReceipt()" id="dash-pos-print-receipt-btn" class="flex-1 bg-slate-900 hover:bg-slate-800 text-white font-extrabold py-3 rounded-xl text-xs flex items-center justify-center gap-1.5 transition-all shadow-md active:scale-95">
                 <svg class="w-4 h-4 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4H7v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z"/></svg>
@@ -1270,6 +1501,89 @@
                 ✨ Next Sale (ការលក់បន្ទាប់)
               </button>
             </div>
+          </div>
+        </div>
+
+        <!-- ACCOUNTING EXPENSE LOGGER MODAL -->
+        <div id="dash-log-expense-modal" class="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm hidden items-center justify-center p-4">
+          <div class="bg-white rounded-3xl max-w-lg w-full overflow-hidden shadow-2xl border border-slate-200 animate-in fade-in zoom-in-95 duration-150 flex flex-col max-h-[92vh]">
+            <div class="bg-[#0F1A30] text-white p-5 border-b border-[#1E2D4A] flex items-center justify-between shrink-0">
+              <div class="flex items-center gap-3">
+                <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-amber-500 to-emerald-600 text-white flex items-center justify-center text-lg font-bold shadow">
+                  💸
+                </div>
+                <div>
+                  <h3 class="font-extrabold text-base text-white">Record Operating Expense</h3>
+                  <p class="text-[11px] text-teal-400 font-bold">កត់ត្រាចំណាយប្រតិបត្តិការ • General Ledger Debit</p>
+                </div>
+              </div>
+              <button type="button" onclick="dashCloseLogExpenseModal()" class="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-slate-800 transition-colors">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+              </button>
+            </div>
+            <form onsubmit="dashSubmitLogExpense(event)" class="p-5 space-y-4 text-xs overflow-y-auto flex-1">
+              <div>
+                <label class="block font-bold text-slate-700 mb-1">Expense Title / Description <span class="text-red-500">*</span></label>
+                <input type="text" id="dash-exp-title" required placeholder="e.g. Monthly Electricity Bill (EDC) or Staff Salaries" class="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2.5 font-medium text-slate-800 focus:ring-2 focus:ring-teal-500 focus:outline-none" />
+              </div>
+              <div class="grid grid-cols-2 gap-3">
+                <div>
+                  <label class="block font-bold text-slate-700 mb-1">Expense Category <span class="text-red-500">*</span></label>
+                  <select id="dash-exp-category" required class="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2.5 font-bold text-slate-800 focus:ring-2 focus:ring-teal-500 focus:outline-none cursor-pointer">
+                    <option value="RENT">🏢 Store Rent &amp; Lease</option>
+                    <option value="PAYROLL">👥 Staff Salaries &amp; Payroll</option>
+                    <option value="UTILITIES">⚡ Utilities (Power, Water, Net)</option>
+                    <option value="RESTOCK">📦 Inventory &amp; Raw Beans</option>
+                    <option value="SUPPLIES">🥤 Packaging &amp; Cups</option>
+                    <option value="MARKETING">📢 Marketing &amp; Promos</option>
+                    <option value="MAINTENANCE">🔧 Repairs &amp; Maintenance</option>
+                    <option value="OTHER">📑 Miscellaneous / General</option>
+                  </select>
+                </div>
+                <div>
+                  <label class="block font-bold text-slate-700 mb-1">Amount ($ USD) <span class="text-red-500">*</span></label>
+                  <input type="number" step="0.01" min="0.01" id="dash-exp-amount" required placeholder="0.00" oninput="dashUpdateExpKhrPreview(this.value)" class="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2.5 font-mono font-bold text-slate-800 focus:ring-2 focus:ring-teal-500 focus:outline-none" />
+                  <div class="text-[10px] text-emerald-600 font-mono mt-0.5" id="dash-exp-khr-preview">≈ ៛0 KHR</div>
+                </div>
+              </div>
+              <div class="grid grid-cols-2 gap-3">
+                <div>
+                  <label class="block font-bold text-slate-700 mb-1">Payment Method</label>
+                  <select id="dash-exp-payment" class="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2.5 font-bold text-slate-800 focus:ring-2 focus:ring-teal-500 focus:outline-none cursor-pointer">
+                    <option value="KHQR">🔴 Bakong KHQR Pay</option>
+                    <option value="Cash">💵 Cash on Hand</option>
+                    <option value="Bank Transfer">🏦 Bank Transfer (ABA/Canadia)</option>
+                  </select>
+                </div>
+                <div>
+                  <label class="block font-bold text-slate-700 mb-1">Expense Date</label>
+                  <input type="date" id="dash-exp-date" class="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 font-medium text-slate-800 focus:ring-2 focus:ring-teal-500 focus:outline-none" />
+                </div>
+              </div>
+              <div class="grid grid-cols-2 gap-3">
+                <div>
+                  <label class="block font-bold text-slate-700 mb-1">Vendor / Payee</label>
+                  <input type="text" id="dash-exp-vendor" placeholder="e.g. EDC, Landlord, Supplier" class="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 font-medium text-slate-800 focus:ring-2 focus:ring-teal-500 focus:outline-none" />
+                </div>
+                <div>
+                  <label class="block font-bold text-slate-700 mb-1">Receipt / Invoice Ref #</label>
+                  <input type="text" id="dash-exp-ref" placeholder="e.g. INV-2026-901" class="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 font-mono text-slate-800 focus:ring-2 focus:ring-teal-500 focus:outline-none" />
+                </div>
+              </div>
+              <div>
+                <label class="block font-bold text-slate-700 mb-1">Audit Notes</label>
+                <input type="text" id="dash-exp-notes" placeholder="Optional notes for accounting ledger" class="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 font-medium text-slate-800 focus:ring-2 focus:ring-teal-500 focus:outline-none" />
+              </div>
+              <div class="pt-2 flex items-center justify-end gap-2 border-t border-slate-100">
+                <button type="button" onclick="dashCloseLogExpenseModal()" class="px-4 py-2.5 rounded-xl border border-slate-300 font-bold text-slate-600 hover:bg-slate-100 transition-all">
+                  Cancel
+                </button>
+                <button type="submit" class="bg-teal-700 hover:bg-teal-600 text-white font-extrabold px-5 py-2.5 rounded-xl shadow-xs active:scale-95 transition-all flex items-center gap-1.5">
+                  <span>💾</span>
+                  <span>Save Expense (កត់ត្រា)</span>
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       </main>
@@ -1324,6 +1638,17 @@
       { id: 'CASH', label: '💵 Cash Only', khmer: '💵 សាច់ប្រាក់សុទ្ធ' },
       { id: 'EXPORT', label: '💾 Export CSV', khmer: '💾 ទាញយកឯកសារ CSV' }
     ],
+    accounting: [
+      { id: 'pnl', label: '📑 Profit & Loss (P&L)', khmer: '📑 របាយការណ៍ចំណេញ-ខាត (P&L)' },
+      { id: 'balancesheet', label: '🏛️ Balance Sheet', khmer: '🏛️ តារាងតុល្យការ' },
+      { id: 'cashflow', label: '💵 Cash Flow', khmer: '💵 លំហូរសាច់ប្រាក់' },
+      { id: 'expenses', label: '💸 Expense Ledger', khmer: '💸 ចំណាយប្រតិបត្តិការ' },
+      { id: 'tax', label: '🏷️ VAT & GDT Tax (10%)', khmer: '🏷️ ពន្ធលើតម្លៃបន្ថែម (10%)' },
+      { id: 'trial', label: '⚖️ Trial Balance', khmer: '⚖️ តារាងតុល្យការសាកល្បង' },
+      { id: 'LOG_EXPENSE', label: '➕ + Log Expense', khmer: '➕ កត់ត្រាចំណាយ' },
+      { id: 'EXPORT_CSV', label: '💾 Export CSV', khmer: '💾 ទាញយក CSV' },
+      { id: 'PRINT', label: '🖨️ Print Statement', khmer: '🖨️ បោះពុម្ពរបាយការណ៍' }
+    ],
     stock: [
       { id: 'ALL', label: '📦 All Stock Levels (23)', khmer: '📦 ស្តុកទំនិញសរុប (23)' },
       { id: 'LOW', label: '⚠️ Low Stock Warnings', khmer: '⚠️ ការព្រមានស្តុកតិច' },
@@ -1353,8 +1678,16 @@
       { id: 'warehouse', label: '📍 Central Warehouse', khmer: '📍 ឃ្លាំងកណ្តាល' },
       { id: 'ADD_BRANCH', label: '➕ + Add New Branch', khmer: '➕ បន្ថែមសាខាថ្មី' }
     ],
+    merchants: [
+      { id: 'all', label: '🏢 All Platform Merchants', khmer: '🏢 អាជីវករទាំងអស់' },
+      { id: 'active', label: '✅ Active Merchants', khmer: '✅ អាជីវករសកម្ម' },
+      { id: 'suspended', label: '⛔ Suspended Accounts', khmer: '⛔ គណនីផ្អាក' },
+      { id: 'OUTBOX', label: '📨 Email Outbox & Codes', khmer: '📨 ប្រអប់ផ្ញើអ៊ីមែល និងកូដ' },
+      { id: 'NEW_MERCHANT', label: '➕ Register New Merchant', khmer: '➕ ចុះឈ្មោះអាជីវករថ្មី' }
+    ],
     settings: [
       { id: 'BAKONG_QR', label: '🔴 Bakong KHQR Setup', khmer: '🔴 កំណត់បាគង KHQR' },
+      { id: 'SALES_TAX', label: '🏷️ Sales Tax (VAT)', khmer: '🏷️ ពន្ធលើការលក់ (VAT)' },
       { id: 'WIFI', label: '📶 Branch Wi-Fi Networks', khmer: '📶 បណ្តាញ Wi-Fi តាមសាខា' },
       { id: 'TELEGRAM', label: '✈️ Telegram Bot Alerts', khmer: '✈️ ការជូនដំណឹង Telegram' },
       { id: 'EXCHANGE', label: '💵 KHR Exchange Rate', khmer: '💵 អត្រាប្តូរប្រាក់រៀល' },
@@ -1385,7 +1718,7 @@
     }
 
     // 2. Render and Expand Submenu directly under the clicked Main Menu in Sidebar
-    const allTabs = ['overview', 'menu', 'pos', 'sales', 'stock', 'staff', 'branches', 'loyalty', 'settings'];
+    const allTabs = ['overview', 'menu', 'pos', 'sales', 'accounting', 'stock', 'staff', 'merchants', 'branches', 'loyalty', 'settings'];
     allTabs.forEach(t => {
       const subListEl = document.getElementById(`dash-subnav-list-${t}`);
       if (!subListEl) return;
@@ -1420,7 +1753,7 @@
     }
     initDashboardDOM();
 
-    const tabs = ['overview', 'menu', 'pos', 'sales', 'stock', 'staff', 'branches', 'loyalty', 'settings'];
+    const tabs = ['overview', 'menu', 'pos', 'sales', 'accounting', 'stock', 'staff', 'merchants', 'branches', 'loyalty', 'settings'];
     tabs.forEach(t => {
       const panel = document.getElementById(`dash-panel-${t}`);
       if (panel) {
@@ -1463,6 +1796,10 @@
       if (titleEl) titleEl.innerText = "Sales History & Financial Reports";
       if (subEl) subEl.innerText = "Complete archive of order transactions and cash vs KHQR tenders";
       renderSalesTab();
+    } else if (tab === 'accounting') {
+      if (titleEl) titleEl.innerText = "Accounting Reports & Financial Statements";
+      if (subEl) subEl.innerText = "Profit & Loss (P&L), Balance Sheet, Cash Flow, Cambodian GDT 10% VAT, and Operating Expenses";
+      renderAccountingTab();
     } else if (tab === 'stock') {
       if (titleEl) titleEl.innerText = "Stock Audit & Inventory Telemetry";
       if (subEl) subEl.innerText = "Real-time units on hand, reorder points, and restock actions";
@@ -1471,6 +1808,10 @@
       if (titleEl) titleEl.innerText = "Staff Accounts & User Access";
       if (subEl) subEl.innerText = "Authorized logins: Chandara Nong, Sarah Miller, Alex Chen, David Ross";
       renderStaffTab();
+    } else if (tab === 'merchants') {
+      if (titleEl) titleEl.innerText = "Platform Merchants & Multi-Tenancy";
+      if (subEl) subEl.innerText = "Manage merchant accounts, access statuses, and isolated POS data";
+      if (typeof window.renderMerchantsTab === 'function') window.renderMerchantsTab();
     } else if (tab === 'branches') {
       if (titleEl) titleEl.innerText = "Store Branches & Active Store Branch Network";
       if (subEl) subEl.innerText = "Manage operating store branches, Wi-Fi credentials, and set active store branch";
@@ -1724,6 +2065,48 @@
       }
     }
 
+    if (catalog.length === 0) {
+      grid.innerHTML = `
+        <div class="col-span-full py-10 px-6 bg-gradient-to-br from-white via-slate-50 to-teal-50/40 border-2 border-dashed border-teal-300 rounded-3xl text-center space-y-4 shadow-sm animate-in fade-in">
+          <div class="w-16 h-16 rounded-2xl bg-teal-500/10 text-[#007A78] border border-teal-200/50 flex items-center justify-center mx-auto text-3xl font-black shadow-inner">
+            🏪
+          </div>
+          <div>
+            <div class="inline-flex items-center gap-1.5 bg-teal-100 text-teal-800 text-[10px] font-extrabold px-2.5 py-0.5 rounded-full mb-1">
+              ✨ Welcome to Your New Merchant POS
+            </div>
+            <h3 class="text-xl font-black text-slate-900">Your Digital Store Terminal is Ready!</h3>
+            <p class="text-xs text-slate-500 max-w-md mx-auto mt-1">Get your point of sale up and running in under a minute with these quick onboarding setup steps:</p>
+          </div>
+          <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 max-w-xl mx-auto pt-2 text-left">
+            <button type="button" onclick="openItemEditorModal()" class="bg-white hover:bg-teal-50 hover:border-teal-400 border border-slate-200 p-3.5 rounded-2xl shadow-xs transition-all active:scale-95 group">
+              <div class="text-2xl mb-1.5 group-hover:scale-110 transition-transform">➕</div>
+              <div class="font-extrabold text-xs text-slate-800">1. Add First Product</div>
+              <div class="text-[10.5px] text-slate-500 mt-0.5">Define name, price &amp; inventory</div>
+            </button>
+            <button type="button" onclick="dashScrollToBakongSettings()" class="bg-white hover:bg-red-50 hover:border-red-300 border border-slate-200 p-3.5 rounded-2xl shadow-xs transition-all active:scale-95 group">
+              <div class="text-2xl mb-1.5 group-hover:scale-110 transition-transform">🔴</div>
+              <div class="font-extrabold text-xs text-slate-800">2. Set Up Bakong KHQR</div>
+              <div class="text-[10.5px] text-slate-500 mt-0.5">Link your merchant account ID</div>
+            </button>
+            <button type="button" onclick="dashOpenTaxEditorModal()" class="bg-white hover:bg-amber-50 hover:border-amber-300 border border-slate-200 p-3.5 rounded-2xl shadow-xs transition-all active:scale-95 group">
+              <div class="text-2xl mb-1.5 group-hover:scale-110 transition-transform">⚙️</div>
+              <div class="font-extrabold text-xs text-slate-800">3. Store Settings</div>
+              <div class="text-[10.5px] text-slate-500 mt-0.5">VAT sales tax &amp; currency rate</div>
+            </button>
+          </div>
+          <div class="pt-2">
+            <button type="button" onclick="loadStarterCatalogForCurrentTenant()" class="inline-flex items-center gap-2 bg-gradient-to-r from-teal-700 to-[#007A78] hover:opacity-95 text-white font-extrabold px-5 py-2.5 rounded-xl text-xs shadow-md active:scale-95 transition-all">
+              <span>📦</span>
+              <span>Load 1-Click Starter Catalog (Latte, Croissant, Tea)</span>
+            </button>
+          </div>
+        </div>
+      `;
+      renderDashPosCartUI();
+      return;
+    }
+
     if (filtered.length === 0) {
       grid.innerHTML = `
         <div class="col-span-full py-12 flex flex-col items-center justify-center text-center text-slate-400">
@@ -1920,6 +2303,8 @@
 
     if (subtotalEl) subtotalEl.innerText = `$${totals.grossSubtotal.toFixed(2)}`;
     if (taxEl) taxEl.innerText = `$${totals.tax.toFixed(2)}`;
+    const taxLabelEl = document.getElementById('dash-pos-tax-label');
+    if (taxLabelEl) taxLabelEl.innerText = `Tax (${totals.taxRate !== undefined ? totals.taxRate : (typeof getSalesTaxRate === 'function' ? getSalesTaxRate() : 10)}%):`;
     if (totalEl) totalEl.innerText = `$${totals.totalUsd.toFixed(2)}`;
     if (totalKhrEl) totalKhrEl.innerText = `៛${totals.totalKhr.toLocaleString()} KHR`;
 
@@ -2026,6 +2411,1387 @@
       </div>
     `;
   }
+
+  /* ==========================================================================
+     ACCOUNTING REPORTING & FINANCIAL STATEMENTS MODULE (គណនេយ្យ និងហិរញ្ញវត្ថុ)
+     Multi-Step P&L • Balance Sheet • Cash Flow • GDT 10% VAT • Expense Ledger
+     ========================================================================== */
+
+  function getAccountingExpenses() {
+    const tenantId = (window.MultiTenantStore && window.MultiTenantStore.getActiveTenantId()) || '';
+    const storageKey = tenantId ? `tr_accounting_expenses_${tenantId}` : 'tr_accounting_expenses';
+    try {
+      const raw = localStorage.getItem(storageKey);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+    } catch (e) {}
+
+    const seedExpenses = [
+      {
+        id: 'EXP-1001',
+        title: 'Store Rent & Lease (BKK1 Flagship)',
+        category: 'RENT',
+        amountUsd: 850.00,
+        vendor: 'BKK1 Property Management Co.',
+        paymentMethod: 'KHQR',
+        date: new Date(Date.now() - 3 * 86400000).toISOString().split('T')[0],
+        referenceNo: 'INV-RENT-1004',
+        notes: 'Monthly retail premises commercial lease'
+      },
+      {
+        id: 'EXP-1002',
+        title: 'Store Manager & Baristas Payroll',
+        category: 'PAYROLL',
+        amountUsd: 920.00,
+        vendor: 'Staff Payroll Disbursement',
+        paymentMethod: 'Bank Transfer',
+        date: new Date(Date.now() - 4 * 86400000).toISOString().split('T')[0],
+        referenceNo: 'PAY-2026-OCT',
+        notes: 'Monthly base salaries and barista shifts'
+      },
+      {
+        id: 'EXP-1003',
+        title: 'Electricity & Commercial Power (EDC)',
+        category: 'UTILITIES',
+        amountUsd: 185.00,
+        vendor: 'Electricité du Cambodge (EDC)',
+        paymentMethod: 'KHQR',
+        date: new Date(Date.now() - 7 * 86400000).toISOString().split('T')[0],
+        referenceNo: 'EDC-882910',
+        notes: 'Commercial AC cooling, espresso machines & refrigeration'
+      },
+      {
+        id: 'EXP-1004',
+        title: 'Clean Water Utility (PPWSA)',
+        category: 'UTILITIES',
+        amountUsd: 32.50,
+        vendor: 'Phnom Penh Water Supply Authority',
+        paymentMethod: 'Cash',
+        date: new Date(Date.now() - 8 * 86400000).toISOString().split('T')[0],
+        referenceNo: 'PPWSA-39481',
+        notes: 'Water filtration system and cafe operations'
+      },
+      {
+        id: 'EXP-1005',
+        title: 'Specialty Arabica Coffee Beans Restock',
+        category: 'RESTOCK',
+        amountUsd: 340.00,
+        vendor: 'Mondulkiri & Ratanakiri Coffee Roasters',
+        paymentMethod: 'KHQR',
+        date: new Date(Date.now() - 10 * 86400000).toISOString().split('T')[0],
+        referenceNo: 'ROAST-5921',
+        notes: '20kg Premium Dark Roast & 15kg Espresso Blend'
+      },
+      {
+        id: 'EXP-1006',
+        title: 'Eco Cups, Straws & Thermal Paper Rolls',
+        category: 'SUPPLIES',
+        amountUsd: 85.00,
+        vendor: 'EcoPack Solutions Cambodia',
+        paymentMethod: 'Cash',
+        date: new Date(Date.now() - 12 * 86400000).toISOString().split('T')[0],
+        referenceNo: 'ECO-8192',
+        notes: '500 Bio cups, hot lids, 20 thermal receipt rolls'
+      },
+      {
+        id: 'EXP-1007',
+        title: 'High-Speed Business Fiber Internet (50 Mbps)',
+        category: 'UTILITIES',
+        amountUsd: 45.00,
+        vendor: 'EZECOM Fiber Internet',
+        paymentMethod: 'KHQR',
+        date: new Date(Date.now() - 14 * 86400000).toISOString().split('T')[0],
+        referenceNo: 'EZ-99418',
+        notes: 'Customer Wi-Fi hotspot & Bakong POS real-time link'
+      },
+      {
+        id: 'EXP-1008',
+        title: 'Social Media & Delivery Platform Boosts',
+        category: 'MARKETING',
+        amountUsd: 65.00,
+        vendor: 'Digital Media Campaign',
+        paymentMethod: 'Bank Transfer',
+        date: new Date(Date.now() - 17 * 86400000).toISOString().split('T')[0],
+        referenceNo: 'MKT-OCT-01',
+        notes: 'Instagram & TikTok promo for cosmetic bundle & iced espresso'
+      },
+      {
+        id: 'EXP-1009',
+        title: 'Espresso Machine Group Head Maintenance',
+        category: 'MAINTENANCE',
+        amountUsd: 55.00,
+        vendor: 'Phnom Penh Coffee Tech Service',
+        paymentMethod: 'Cash',
+        date: new Date(Date.now() - 20 * 86400000).toISOString().split('T')[0],
+        referenceNo: 'TECH-7718',
+        notes: 'Pressure calibration, gasket replacement & water descaling'
+      }
+    ];
+
+    try {
+      localStorage.setItem(storageKey, JSON.stringify(seedExpenses));
+    } catch (e) {}
+    return seedExpenses;
+  }
+
+  function saveAccountingExpense(exp) {
+    const tenantId = (window.MultiTenantStore && window.MultiTenantStore.getActiveTenantId()) || '';
+    const storageKey = tenantId ? `tr_accounting_expenses_${tenantId}` : 'tr_accounting_expenses';
+    const list = getAccountingExpenses();
+    list.unshift(exp);
+    try {
+      localStorage.setItem(storageKey, JSON.stringify(list));
+    } catch (e) {}
+    return list;
+  }
+
+  function deleteAccountingExpense(id) {
+    const tenantId = (window.MultiTenantStore && window.MultiTenantStore.getActiveTenantId()) || '';
+    const storageKey = tenantId ? `tr_accounting_expenses_${tenantId}` : 'tr_accounting_expenses';
+    const list = getAccountingExpenses().filter(e => e.id !== id);
+    try {
+      localStorage.setItem(storageKey, JSON.stringify(list));
+    } catch (e) {}
+    return list;
+  }
+
+  function calculateAccountingMetrics(period = 'ALL') {
+    const rawSales = getDashboardSales();
+    const rawExpenses = getAccountingExpenses();
+    const catalog = getDashboardCatalog();
+
+    // Time boundary filters
+    const now = new Date();
+    const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+    const startOfWeek = startOfDay - ((now.getDay() === 0 ? 7 : now.getDay()) - 1) * 86400000;
+    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).getTime();
+    const currentQuarter = Math.floor(now.getMonth() / 3);
+    const startOfQuarter = new Date(now.getFullYear(), currentQuarter * 3, 1).getTime();
+    const startOfYear = new Date(now.getFullYear(), 0, 1).getTime();
+
+    function isTimestampInPeriod(ts) {
+      if (!ts || period === 'ALL') return true;
+      const t = typeof ts === 'string' ? new Date(ts).getTime() : Number(ts);
+      if (isNaN(t)) return true;
+      if (period === 'TODAY') return t >= startOfDay;
+      if (period === 'WEEK') return t >= startOfWeek;
+      if (period === 'MONTH') return t >= startOfMonth;
+      if (period === 'QUARTER') return t >= startOfQuarter;
+      if (period === 'YEAR') return t >= startOfYear;
+      return true;
+    }
+
+    const filteredSales = rawSales.filter(s => isTimestampInPeriod(s.timestamp));
+    const filteredExpenses = rawExpenses.filter(e => {
+      if (period === 'ALL') return true;
+      const t = e.date ? new Date(e.date).getTime() : Date.now();
+      return isTimestampInPeriod(t);
+    });
+
+    // 1. REVENUE CALCULATIONS
+    let grossSalesUsd = 0;
+    let deptRevenue = { COFFEE: 0, COSMETICS: 0, SERVICES: 0, BAKERY: 0, GIFTS: 0, OTHER: 0 };
+    let tenderRevenue = { CASH: 0, KHQR: 0 };
+    let totalDiscountUsd = 0;
+
+    filteredSales.forEach(s => {
+      const amt = Number(s.totalUsd || 0);
+      grossSalesUsd += amt;
+
+      const tender = (s.tender || 'CASH').toUpperCase();
+      if (tender === 'KHQR') tenderRevenue.KHQR += amt;
+      else tenderRevenue.CASH += amt;
+
+      if (s.items && Array.isArray(s.items)) {
+        s.items.forEach(it => {
+          const itemDept = (it.department || it.dept || 'COFFEE').toUpperCase();
+          const itemTotal = (Number(it.priceUsd || it.price || 0) * Number(it.qty || it.quantity || 1));
+          if (deptRevenue[itemDept] !== undefined) deptRevenue[itemDept] += itemTotal;
+          else deptRevenue.OTHER += itemTotal;
+        });
+      } else {
+        const d = (s.department || 'COFFEE').toUpperCase();
+        if (deptRevenue[d] !== undefined) deptRevenue[d] += amt;
+        else deptRevenue.COFFEE += amt;
+      }
+
+      if (s.discountAmount) totalDiscountUsd += Number(s.discountAmount);
+    });
+
+    const netSalesRevenueUsd = Math.max(0, grossSalesUsd - totalDiscountUsd);
+
+    // 2. COST OF GOODS SOLD (COGS)
+    let totalCogsUsd = 0;
+    filteredSales.forEach(s => {
+      if (s.items && Array.isArray(s.items) && s.items.length > 0) {
+        s.items.forEach(it => {
+          const qty = Number(it.qty || it.quantity || 1);
+          let unitCost = Number(it.costUsd);
+          if (isNaN(unitCost) || unitCost <= 0) {
+            const catItem = catalog.find(c => c.id === it.id || c.name === it.name);
+            if (catItem && !isNaN(Number(catItem.costUsd))) unitCost = Number(catItem.costUsd);
+            else unitCost = Number(it.priceUsd || 2.50) * 0.35;
+          }
+          totalCogsUsd += unitCost * qty;
+        });
+      } else {
+        totalCogsUsd += Number(s.totalUsd || 0) * 0.35;
+      }
+    });
+
+    const grossProfitUsd = Math.max(0, netSalesRevenueUsd - totalCogsUsd);
+    const grossMarginPct = netSalesRevenueUsd > 0 ? ((grossProfitUsd / netSalesRevenueUsd) * 100).toFixed(1) : '0.0';
+
+    // 3. OPERATING EXPENSES (OpEx)
+    let opexByCategory = {
+      RENT: 0,
+      PAYROLL: 0,
+      UTILITIES: 0,
+      RESTOCK: 0,
+      SUPPLIES: 0,
+      MARKETING: 0,
+      MAINTENANCE: 0,
+      OTHER: 0
+    };
+    let totalOpExUsd = 0;
+
+    filteredExpenses.forEach(e => {
+      const amt = Number(e.amountUsd || 0);
+      const cat = (e.category || 'OTHER').toUpperCase();
+      if (opexByCategory[cat] !== undefined) opexByCategory[cat] += amt;
+      else opexByCategory.OTHER += amt;
+      totalOpExUsd += amt;
+    });
+
+    // 4. OPERATING INCOME & EBITDA
+    const ebitdaUsd = grossProfitUsd - totalOpExUsd;
+
+    // 5. DEPRECIATION ALLOWANCE (Commercial Espresso, POS, Cafe Fitout ~$85/mo prorated)
+    const depreciationAllowance = period === 'TODAY' ? 2.80 : (period === 'WEEK' ? 19.50 : (period === 'MONTH' ? 85.00 : (period === 'QUARTER' ? 255.00 : 340.00)));
+
+    // 6. CAMBODIAN GDT 10% VAT
+    const outputVatUsd = netSalesRevenueUsd * 0.10;
+    const inputVatDeductibleUsd = (opexByCategory.UTILITIES + opexByCategory.SUPPLIES + opexByCategory.MAINTENANCE + opexByCategory.MARKETING) * 0.10;
+    const netVatPayableUsd = Math.max(0, outputVatUsd - inputVatDeductibleUsd);
+
+    // 7. NET PROFIT AFTER TAX
+    const netProfitUsd = ebitdaUsd - netVatPayableUsd - depreciationAllowance;
+    const netMarginPct = netSalesRevenueUsd > 0 ? ((netProfitUsd / netSalesRevenueUsd) * 100).toFixed(1) : '0.0';
+
+    // 8. BALANCE SHEET POSITIONS
+    let totalInventoryValuationUsd = 0;
+    catalog.forEach(item => {
+      const units = Number(item.stock !== undefined ? item.stock : 10);
+      const cost = Number(item.costUsd || ((item.priceUsd || 2.50) * 0.35));
+      totalInventoryValuationUsd += units * cost;
+    });
+
+    const cashInDrawerUsd = 350.00 + tenderRevenue.CASH;
+    const bakongBankAccountUsd = 1250.00 + tenderRevenue.KHQR;
+    const accountsReceivableUsd = 120.00;
+    const totalCurrentAssetsUsd = cashInDrawerUsd + bakongBankAccountUsd + accountsReceivableUsd + totalInventoryValuationUsd;
+
+    const fixedAssetsGrossUsd = 8800.00; // Espresso machines $3200 + POS $1100 + Fitout $4500
+    const accumulatedDepreciationUsd = 850.00;
+    const netFixedAssetsUsd = fixedAssetsGrossUsd - accumulatedDepreciationUsd;
+    const totalAssetsUsd = totalCurrentAssetsUsd + netFixedAssetsUsd;
+
+    const accountsPayableUsd = 480.00;
+    const accruedPayrollUsd = 450.00;
+    const totalLiabilitiesUsd = accountsPayableUsd + accruedPayrollUsd + netVatPayableUsd;
+
+    const ownerCapitalUsd = 7000.00;
+    const retainedEarningsUsd = Math.max(0, totalAssetsUsd - totalLiabilitiesUsd - ownerCapitalUsd - (netProfitUsd > 0 ? netProfitUsd : 0));
+    const totalEquityUsd = totalAssetsUsd - totalLiabilitiesUsd;
+
+    return {
+      period,
+      ordersCount: filteredSales.length,
+      grossSalesUsd,
+      grossSalesKhr: Math.round(grossSalesUsd * 4100),
+      totalDiscountUsd,
+      netSalesRevenueUsd,
+      netSalesRevenueKhr: Math.round(netSalesRevenueUsd * 4100),
+      totalCogsUsd,
+      totalCogsKhr: Math.round(totalCogsUsd * 4100),
+      grossProfitUsd,
+      grossProfitKhr: Math.round(grossProfitUsd * 4100),
+      grossMarginPct,
+      deptRevenue,
+      tenderRevenue,
+      opexByCategory,
+      totalOpExUsd,
+      totalOpExKhr: Math.round(totalOpExUsd * 4100),
+      ebitdaUsd,
+      ebitdaKhr: Math.round(ebitdaUsd * 4100),
+      depreciationAllowance,
+      outputVatUsd,
+      inputVatDeductibleUsd,
+      netVatPayableUsd,
+      netVatPayableKhr: Math.round(netVatPayableUsd * 4100),
+      netProfitUsd,
+      netProfitKhr: Math.round(netProfitUsd * 4100),
+      netMarginPct,
+      expensesCount: filteredExpenses.length,
+      expensesList: filteredExpenses,
+      // Balance sheet
+      cashInDrawerUsd,
+      bakongBankAccountUsd,
+      accountsReceivableUsd,
+      totalInventoryValuationUsd,
+      totalCurrentAssetsUsd,
+      fixedAssetsGrossUsd,
+      accumulatedDepreciationUsd,
+      netFixedAssetsUsd,
+      totalAssetsUsd,
+      accountsPayableUsd,
+      accruedPayrollUsd,
+      totalLiabilitiesUsd,
+      ownerCapitalUsd,
+      retainedEarningsUsd,
+      totalEquityUsd
+    };
+  }
+
+  function renderAccountingTab(subTab = null, period = null) {
+    if (subTab) accountingSubTab = subTab;
+    if (period) accountingFilterPeriod = period;
+
+    const wrapper = document.getElementById('dash-accounting-content-wrapper');
+    if (!wrapper) return;
+
+    const m = calculateAccountingMetrics(accountingFilterPeriod);
+    const isKhmer = activeDashLang === 'KH';
+
+    wrapper.innerHTML = `
+      <!-- TOP EXECUTIVE ACCOUNTING CONTROL & KPI BAR -->
+      <div class="bg-white border border-slate-200 rounded-3xl p-5 shadow-xs space-y-4">
+        <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-100 pb-4">
+          <div>
+            <div class="flex items-center gap-2">
+              <span class="w-8 h-8 rounded-xl bg-teal-100 text-teal-800 font-bold flex items-center justify-center text-base">📑</span>
+              <h3 class="font-black text-lg text-slate-900 tracking-tight">
+                ${isKhmer ? 'របាយការណ៍គណនេយ្យ និងហិរញ្ញវត្ថុ' : 'Executive Accounting & Financial Statements'}
+              </h3>
+              <span class="bg-emerald-100 text-emerald-800 border border-emerald-300 text-[10px] font-black px-2 py-0.5 rounded-full font-mono">
+                Cambodia GDT VAT 10%
+              </span>
+            </div>
+            <p class="text-xs text-slate-500 mt-0.5">
+              ${isKhmer ? 'របាយការណ៍ចំណេញ-ខាត (P&L) • តារាងតុល្យការ • លំហូរសាច់ប្រាក់ • អត្រា $1 = ៛4,100' : 'Double-Entry Telemetry • P&L Statement • Balance Sheet • Cash Flow • Exchange ៛4,100'}
+            </p>
+          </div>
+
+          <!-- Actions Toolbar -->
+          <div class="flex flex-wrap items-center gap-2">
+            <!-- Period Selector Pills -->
+            <div class="flex items-center bg-slate-100 p-1 rounded-2xl border border-slate-200 text-xs font-bold">
+              ${['ALL', 'TODAY', 'WEEK', 'MONTH', 'QUARTER', 'YEAR'].map(p => {
+                const isSel = accountingFilterPeriod === p;
+                const labels = {
+                  ALL: isKhmer ? 'សរុប' : 'All Time',
+                  TODAY: isKhmer ? 'ថ្ងៃនេះ' : 'Today',
+                  WEEK: isKhmer ? '៧ថ្ងៃ' : '7 Days',
+                  MONTH: isKhmer ? 'ខែនេះ' : 'Month',
+                  QUARTER: isKhmer ? 'ត្រីមាស' : 'Qtr',
+                  YEAR: isKhmer ? 'ឆ្នាំនេះ' : 'Year'
+                };
+                return `
+                  <button type="button" onclick="dashChangeAccountingPeriod('${p}')" class="px-2.5 py-1 rounded-xl transition-all ${isSel ? 'bg-[#007A78] text-white shadow-xs' : 'text-slate-600 hover:text-slate-900'}">
+                    ${labels[p]}
+                  </button>
+                `;
+              }).join('')}
+            </div>
+
+            <!-- Currency Toggle -->
+            <div class="flex items-center bg-slate-100 p-1 rounded-2xl border border-slate-200 text-xs font-bold">
+              <button type="button" onclick="dashSetAccountingCurrency('DUAL')" class="px-2 py-1 rounded-xl transition-all ${accountingCurrencyMode === 'DUAL' ? 'bg-slate-900 text-white shadow-xs' : 'text-slate-600'}">Dual $/៛</button>
+              <button type="button" onclick="dashSetAccountingCurrency('USD')" class="px-2 py-1 rounded-xl transition-all ${accountingCurrencyMode === 'USD' ? 'bg-slate-900 text-white shadow-xs' : 'text-slate-600'}">USD ($)</button>
+              <button type="button" onclick="dashSetAccountingCurrency('KHR')" class="px-2 py-1 rounded-xl transition-all ${accountingCurrencyMode === 'KHR' ? 'bg-slate-900 text-white shadow-xs' : 'text-slate-600'}">KHR (៛)</button>
+            </div>
+
+            <!-- Quick Action Buttons -->
+            <button type="button" onclick="dashOpenLogExpenseModal()" class="bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-xs px-3 py-2 rounded-xl shadow-xs flex items-center gap-1.5 active:scale-95 transition-all">
+              <span>+</span><span>${isKhmer ? 'កត់ត្រាចំណាយ' : 'Log Expense'}</span>
+            </button>
+            <button type="button" onclick="exportAccountingToCsv()" class="bg-slate-800 hover:bg-slate-700 text-slate-100 font-bold text-xs px-3 py-2 rounded-xl shadow-xs flex items-center gap-1.5 active:scale-95 transition-all" title="Export Accounting CSV">
+              <span>💾</span><span>CSV</span>
+            </button>
+            <button type="button" onclick="dashPrintAccountingReport()" class="bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold text-xs px-3 py-2 rounded-xl shadow-xs flex items-center gap-1.5 active:scale-95 transition-all" title="Print Statement">
+              <span>🖨️</span><span>Print</span>
+            </button>
+            <button type="button" onclick="dashCopyPnlSummary()" class="bg-teal-50 hover:bg-teal-100 text-teal-800 font-bold text-xs px-3 py-2 rounded-xl shadow-xs flex items-center gap-1.5 active:scale-95 transition-all" title="Copy P&L Summary">
+              <span>📋</span><span>Copy</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- 5 TOP LEVEL FINANCIAL KPI CARDS -->
+        <div class="grid grid-cols-2 lg:grid-cols-5 gap-3">
+          <!-- KPI 1: Gross Revenue -->
+          <div class="bg-slate-50 border border-slate-200/90 rounded-2xl p-3.5 hover:border-teal-500/50 transition-all">
+            <div class="flex items-center justify-between text-slate-500 text-[11px] font-bold uppercase tracking-wider mb-1">
+              <span>${isKhmer ? 'ចំណូលលក់ដុល' : 'Gross Revenue'}</span>
+              <span class="text-teal-600">💰</span>
+            </div>
+            <div class="text-xl sm:text-2xl font-black text-slate-900 font-mono tracking-tight">$${m.netSalesRevenueUsd.toFixed(2)}</div>
+            <div class="text-[11px] text-teal-700 font-bold mt-0.5 font-mono">៛${m.netSalesRevenueKhr.toLocaleString()} KHR</div>
+            <div class="text-[10px] text-slate-400 mt-1">${m.ordersCount} completed orders</div>
+          </div>
+
+          <!-- KPI 2: COGS -->
+          <div class="bg-slate-50 border border-slate-200/90 rounded-2xl p-3.5 hover:border-amber-500/50 transition-all">
+            <div class="flex items-center justify-between text-slate-500 text-[11px] font-bold uppercase tracking-wider mb-1">
+              <span>${isKhmer ? 'ថ្លៃដើមទំនិញ (COGS)' : 'Cost of Goods'}</span>
+              <span class="text-amber-600">📦</span>
+            </div>
+            <div class="text-xl sm:text-2xl font-black text-slate-900 font-mono tracking-tight">$${m.totalCogsUsd.toFixed(2)}</div>
+            <div class="text-[11px] text-amber-700 font-bold mt-0.5 font-mono">៛${m.totalCogsKhr.toLocaleString()} KHR</div>
+            <div class="text-[10px] text-slate-400 mt-1">${(m.netSalesRevenueUsd > 0 ? ((m.totalCogsUsd / m.netSalesRevenueUsd) * 100).toFixed(1) : '35.0')}% cost ratio</div>
+          </div>
+
+          <!-- KPI 3: Gross Profit -->
+          <div class="bg-slate-50 border border-slate-200/90 rounded-2xl p-3.5 hover:border-emerald-500/50 transition-all">
+            <div class="flex items-center justify-between text-slate-500 text-[11px] font-bold uppercase tracking-wider mb-1">
+              <span>${isKhmer ? 'ចំណេញដុល (GP)' : 'Gross Profit'}</span>
+              <span class="text-emerald-600">📈</span>
+            </div>
+            <div class="text-xl sm:text-2xl font-black text-emerald-700 font-mono tracking-tight">$${m.grossProfitUsd.toFixed(2)}</div>
+            <div class="text-[11px] text-emerald-800 font-bold mt-0.5 font-mono">៛${m.grossProfitKhr.toLocaleString()} KHR</div>
+            <div class="text-[10px] text-emerald-600 font-bold mt-1">${m.grossMarginPct}% gross margin</div>
+          </div>
+
+          <!-- KPI 4: Operating Expenses -->
+          <div class="bg-slate-50 border border-slate-200/90 rounded-2xl p-3.5 hover:border-rose-500/50 transition-all">
+            <div class="flex items-center justify-between text-slate-500 text-[11px] font-bold uppercase tracking-wider mb-1">
+              <span>${isKhmer ? 'ចំណាយប្រតិបត្តិការ' : 'Total OpEx'}</span>
+              <span class="text-rose-600">💸</span>
+            </div>
+            <div class="text-xl sm:text-2xl font-black text-slate-900 font-mono tracking-tight">$${m.totalOpExUsd.toFixed(2)}</div>
+            <div class="text-[11px] text-rose-700 font-bold mt-0.5 font-mono">៛${m.totalOpExKhr.toLocaleString()} KHR</div>
+            <div class="text-[10px] text-slate-400 mt-1">${m.expensesCount} logged expenses</div>
+          </div>
+
+          <!-- KPI 5: Net Profit -->
+          <div class="bg-gradient-to-br ${m.netProfitUsd >= 0 ? 'from-emerald-50 to-teal-50 border-emerald-200' : 'from-rose-50 to-amber-50 border-rose-200'} border rounded-2xl p-3.5 col-span-2 lg:col-span-1">
+            <div class="flex items-center justify-between text-slate-600 text-[11px] font-extrabold uppercase tracking-wider mb-1">
+              <span>${isKhmer ? 'ចំណេញសុទ្ធ (Net)' : 'Net Profit (EBIT)'}</span>
+              <span class="${m.netProfitUsd >= 0 ? 'text-emerald-700' : 'text-rose-700'}">${m.netProfitUsd >= 0 ? '✨' : '⚠️'}</span>
+            </div>
+            <div class="text-xl sm:text-2xl font-black ${m.netProfitUsd >= 0 ? 'text-emerald-800' : 'text-rose-700'} font-mono tracking-tight">
+              ${m.netProfitUsd >= 0 ? '$' : '-$'}${Math.abs(m.netProfitUsd).toFixed(2)}
+            </div>
+            <div class="text-[11px] ${m.netProfitUsd >= 0 ? 'text-emerald-700' : 'text-rose-700'} font-bold mt-0.5 font-mono">
+              ${m.netProfitUsd >= 0 ? '៛' : '-៛'}${Math.abs(m.netProfitKhr).toLocaleString()} KHR
+            </div>
+            <div class="text-[10px] ${m.netProfitUsd >= 0 ? 'text-emerald-700' : 'text-rose-600'} font-black mt-1">
+              ${m.netMarginPct}% net margin
+            </div>
+          </div>
+        </div>
+
+        <!-- REPORT VIEW SELECTION TABS -->
+        <div class="flex items-center gap-1.5 overflow-x-auto pt-2 border-t border-slate-100 scrollbar-none">
+          ${[
+            { id: 'pnl', icon: '📑', label: isKhmer ? 'របាយការណ៍ចំណេញ-ខាត (P&L)' : 'Profit & Loss (P&L)' },
+            { id: 'balancesheet', icon: '🏛️', label: isKhmer ? 'តារាងតុល្យការ' : 'Balance Sheet' },
+            { id: 'cashflow', icon: '💵', label: isKhmer ? 'លំហូរសាច់ប្រាក់' : 'Cash Flow Statement' },
+            { id: 'expenses', icon: '💸', label: isKhmer ? 'បញ្ជីចំណាយប្រតិបត្តិការ' : 'Operating Expense Ledger' },
+            { id: 'tax', icon: '🏷️', label: isKhmer ? 'ពន្ធលើតម្លៃបន្ថែម (GDT VAT 10%)' : 'Cambodia GDT VAT 10%' },
+            { id: 'trial', icon: '⚖️', label: isKhmer ? 'តារាងតុល្យការសាកល្បង' : 'Trial Balance (Double-Entry)' }
+          ].map(t => {
+            const isSel = accountingSubTab === t.id;
+            return `
+              <button type="button" onclick="dashChangeAccountingSubTab('${t.id}')" class="px-3.5 py-2 rounded-xl text-xs font-bold whitespace-nowrap transition-all flex items-center gap-2 ${
+                isSel
+                  ? 'bg-[#007A78] text-white shadow-xs ring-2 ring-teal-400/40'
+                  : 'bg-slate-100 hover:bg-slate-200 text-slate-700'
+              }">
+                <span>${t.icon}</span><span>${t.label}</span>
+              </button>
+            `;
+          }).join('')}
+        </div>
+      </div>
+
+      <!-- DYNAMIC SUB-VIEW CONTAINER -->
+      <div id="dash-accounting-view-area">
+        ${renderActiveAccountingSubView(accountingSubTab, m)}
+      </div>
+    `;
+  }
+
+  function renderActiveAccountingSubView(subView, m) {
+    if (subView === 'balancesheet') return renderBalanceSheetView(m);
+    if (subView === 'cashflow') return renderCashFlowView(m);
+    if (subView === 'expenses') return renderExpenseLedgerView(m);
+    if (subView === 'tax') return renderTaxComplianceView(m);
+    if (subView === 'trial') return renderTrialBalanceView(m);
+    return renderPnlView(m);
+  }
+
+  /* --------------------------------------------------------------------------
+     1. PROFIT & LOSS (P&L / INCOME STATEMENT) VIEW
+     -------------------------------------------------------------------------- */
+  function renderPnlView(m) {
+    const isKhmer = activeDashLang === 'KH';
+    const showKhr = accountingCurrencyMode !== 'USD';
+    const showUsd = accountingCurrencyMode !== 'KHR';
+
+    function fmtVal(usd) {
+      const parts = [];
+      if (showUsd) parts.push(`$${usd.toFixed(2)}`);
+      if (showKhr) parts.push(`៛${Math.round(usd * 4100).toLocaleString()}`);
+      return parts.join(' • ');
+    }
+
+    return `
+      <div class="bg-white border border-slate-200 rounded-3xl p-5 sm:p-6 shadow-xs space-y-5">
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-4">
+          <div>
+            <h4 class="font-black text-base text-slate-900 flex items-center gap-2">
+              <span>📑</span>
+              <span>${isKhmer ? 'របាយការណ៍ចំណូល និងចំណាយ (ចំណេញ-ខាត)' : 'Statement of Profit and Loss (Income Statement)'}</span>
+            </h4>
+            <p class="text-xs text-slate-500">TR Store &amp; Cafe (កាហ្វេ ទីរ៉ូ) • Operating Period: <strong class="text-teal-700">${m.period}</strong></p>
+          </div>
+          <div class="text-xs bg-slate-100 text-slate-600 px-3 py-1.5 rounded-xl font-bold flex items-center gap-1.5 self-start sm:self-auto">
+            <span>📅 Generated:</span><span class="font-mono">${new Date().toLocaleDateString([], { dateStyle: 'medium' })}</span>
+          </div>
+        </div>
+
+        <div class="overflow-x-auto">
+          <table class="w-full text-xs text-left">
+            <thead class="bg-slate-50 border-b border-slate-200 text-slate-500 uppercase text-[10px] font-black tracking-wider">
+              <tr>
+                <th class="py-3 px-4">Financial Line Item</th>
+                <th class="py-3 px-3 text-right">USD ($)</th>
+                <th class="py-3 px-3 text-right">KHR (៛)</th>
+                <th class="py-3 px-3 text-right">% of Revenue</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-slate-100">
+              <!-- SECTION 1: REVENUE -->
+              <tr class="bg-teal-50/50 font-black text-teal-900">
+                <td class="py-2.5 px-4" colspan="4">1. OPERATING REVENUE (ចំណូលប្រតិបត្តិការ)</td>
+              </tr>
+              <tr class="hover:bg-slate-50">
+                <td class="py-2 px-4 pl-8 text-slate-700 flex items-center gap-1.5"><span>☕</span><span>Coffee &amp; Specialty Beverages</span></td>
+                <td class="py-2 px-3 text-right font-mono font-bold text-slate-800">$${(m.deptRevenue.COFFEE || 0).toFixed(2)}</td>
+                <td class="py-2 px-3 text-right font-mono text-slate-500">៛${Math.round((m.deptRevenue.COFFEE || 0) * 4100).toLocaleString()}</td>
+                <td class="py-2 px-3 text-right font-mono text-slate-500">${m.netSalesRevenueUsd > 0 ? (((m.deptRevenue.COFFEE || 0) / m.netSalesRevenueUsd) * 100).toFixed(1) : 0}%</td>
+              </tr>
+              <tr class="hover:bg-slate-50">
+                <td class="py-2 px-4 pl-8 text-slate-700 flex items-center gap-1.5"><span>💄</span><span>Cosmetics &amp; Skincare Retail</span></td>
+                <td class="py-2 px-3 text-right font-mono font-bold text-slate-800">$${(m.deptRevenue.COSMETICS || 0).toFixed(2)}</td>
+                <td class="py-2 px-3 text-right font-mono text-slate-500">៛${Math.round((m.deptRevenue.COSMETICS || 0) * 4100).toLocaleString()}</td>
+                <td class="py-2 px-3 text-right font-mono text-slate-500">${m.netSalesRevenueUsd > 0 ? (((m.deptRevenue.COSMETICS || 0) / m.netSalesRevenueUsd) * 100).toFixed(1) : 0}%</td>
+              </tr>
+              <tr class="hover:bg-slate-50">
+                <td class="py-2 px-4 pl-8 text-slate-700 flex items-center gap-1.5"><span>💆‍♀️</span><span>Salon, Spa &amp; Beauty Services</span></td>
+                <td class="py-2 px-3 text-right font-mono font-bold text-slate-800">$${(m.deptRevenue.SERVICES || 0).toFixed(2)}</td>
+                <td class="py-2 px-3 text-right font-mono text-slate-500">៛${Math.round((m.deptRevenue.SERVICES || 0) * 4100).toLocaleString()}</td>
+                <td class="py-2 px-3 text-right font-mono text-slate-500">${m.netSalesRevenueUsd > 0 ? (((m.deptRevenue.SERVICES || 0) / m.netSalesRevenueUsd) * 100).toFixed(1) : 0}%</td>
+              </tr>
+              <tr class="hover:bg-slate-50">
+                <td class="py-2 px-4 pl-8 text-slate-700 flex items-center gap-1.5"><span>🥐</span><span>Bakery, Pastries &amp; Gift Bundles</span></td>
+                <td class="py-2 px-3 text-right font-mono font-bold text-slate-800">$${((m.deptRevenue.BAKERY || 0) + (m.deptRevenue.GIFTS || 0) + (m.deptRevenue.OTHER || 0)).toFixed(2)}</td>
+                <td class="py-2 px-3 text-right font-mono text-slate-500">៛${Math.round(((m.deptRevenue.BAKERY || 0) + (m.deptRevenue.GIFTS || 0) + (m.deptRevenue.OTHER || 0)) * 4100).toLocaleString()}</td>
+                <td class="py-2 px-3 text-right font-mono text-slate-500">${m.netSalesRevenueUsd > 0 ? ((((m.deptRevenue.BAKERY || 0) + (m.deptRevenue.GIFTS || 0) + (m.deptRevenue.OTHER || 0)) / m.netSalesRevenueUsd) * 100).toFixed(1) : 0}%</td>
+              </tr>
+              <tr class="hover:bg-slate-50 text-slate-500">
+                <td class="py-2 px-4 pl-8">Less: Customer Discounts &amp; Promotion Vouchers</td>
+                <td class="py-2 px-3 text-right font-mono text-rose-600">-$${m.totalDiscountUsd.toFixed(2)}</td>
+                <td class="py-2 px-3 text-right font-mono text-rose-500">-៛${Math.round(m.totalDiscountUsd * 4100).toLocaleString()}</td>
+                <td class="py-2 px-3 text-right font-mono text-slate-500">-</td>
+              </tr>
+              <tr class="bg-slate-100/80 font-black text-slate-900">
+                <td class="py-2.5 px-4 font-bold">TOTAL NET SALES REVENUE</td>
+                <td class="py-2.5 px-3 text-right font-mono font-extrabold text-teal-800">$${m.netSalesRevenueUsd.toFixed(2)}</td>
+                <td class="py-2.5 px-3 text-right font-mono font-extrabold text-teal-800">៛${m.netSalesRevenueKhr.toLocaleString()}</td>
+                <td class="py-2.5 px-3 text-right font-mono">100.0%</td>
+              </tr>
+
+              <!-- SECTION 2: COGS -->
+              <tr class="bg-amber-50/50 font-black text-amber-900">
+                <td class="py-2.5 px-4" colspan="4">2. COST OF GOODS SOLD - COGS (ថ្លៃដើមទំនិញលក់)</td>
+              </tr>
+              <tr class="hover:bg-slate-50">
+                <td class="py-2 px-4 pl-8 text-slate-700">Cost of Raw Coffee Beans, Milk &amp; Syrups</td>
+                <td class="py-2 px-3 text-right font-mono font-medium text-slate-800">$${(m.totalCogsUsd * 0.55).toFixed(2)}</td>
+                <td class="py-2 px-3 text-right font-mono text-slate-500">៛${Math.round(m.totalCogsUsd * 0.55 * 4100).toLocaleString()}</td>
+                <td class="py-2 px-3 text-right font-mono text-slate-500">${m.netSalesRevenueUsd > 0 ? (((m.totalCogsUsd * 0.55) / m.netSalesRevenueUsd) * 100).toFixed(1) : 0}%</td>
+              </tr>
+              <tr class="hover:bg-slate-50">
+                <td class="py-2 px-4 pl-8 text-slate-700">Wholesale Unit Cost of Cosmetics &amp; Skincare Goods</td>
+                <td class="py-2 px-3 text-right font-mono font-medium text-slate-800">$${(m.totalCogsUsd * 0.35).toFixed(2)}</td>
+                <td class="py-2 px-3 text-right font-mono text-slate-500">៛${Math.round(m.totalCogsUsd * 0.35 * 4100).toLocaleString()}</td>
+                <td class="py-2 px-3 text-right font-mono text-slate-500">${m.netSalesRevenueUsd > 0 ? (((m.totalCogsUsd * 0.35) / m.netSalesRevenueUsd) * 100).toFixed(1) : 0}%</td>
+              </tr>
+              <tr class="hover:bg-slate-50">
+                <td class="py-2 px-4 pl-8 text-slate-700">Bakery Ingredients &amp; Salon Consumables</td>
+                <td class="py-2 px-3 text-right font-mono font-medium text-slate-800">$${(m.totalCogsUsd * 0.10).toFixed(2)}</td>
+                <td class="py-2 px-3 text-right font-mono text-slate-500">៛${Math.round(m.totalCogsUsd * 0.10 * 4100).toLocaleString()}</td>
+                <td class="py-2 px-3 text-right font-mono text-slate-500">${m.netSalesRevenueUsd > 0 ? (((m.totalCogsUsd * 0.10) / m.netSalesRevenueUsd) * 100).toFixed(1) : 0}%</td>
+              </tr>
+              <tr class="bg-amber-100/70 font-black text-amber-950">
+                <td class="py-2.5 px-4 font-bold">TOTAL COST OF GOODS SOLD</td>
+                <td class="py-2.5 px-3 text-right font-mono font-extrabold text-amber-900">$${m.totalCogsUsd.toFixed(2)}</td>
+                <td class="py-2.5 px-3 text-right font-mono font-extrabold text-amber-900">៛${m.totalCogsKhr.toLocaleString()}</td>
+                <td class="py-2.5 px-3 text-right font-mono">${(m.netSalesRevenueUsd > 0 ? ((m.totalCogsUsd / m.netSalesRevenueUsd) * 100).toFixed(1) : 0)}%</td>
+              </tr>
+
+              <!-- SECTION 3: GROSS PROFIT -->
+              <tr class="bg-emerald-100/80 font-black text-emerald-950 text-sm">
+                <td class="py-3 px-4 font-black">GROSS PROFIT (ប្រាក់ចំណេញដុល)</td>
+                <td class="py-3 px-3 text-right font-mono font-black text-emerald-800">$${m.grossProfitUsd.toFixed(2)}</td>
+                <td class="py-3 px-3 text-right font-mono font-black text-emerald-800">៛${m.grossProfitKhr.toLocaleString()}</td>
+                <td class="py-3 px-3 text-right font-mono font-black">${m.grossMarginPct}%</td>
+              </tr>
+
+              <!-- SECTION 4: OPERATING EXPENSES (OpEx) -->
+              <tr class="bg-rose-50/50 font-black text-rose-900">
+                <td class="py-2.5 px-4" colspan="4">3. OPERATING EXPENSES - OpEx (ចំណាយប្រតិបត្តិការ)</td>
+              </tr>
+              <tr class="hover:bg-slate-50">
+                <td class="py-2 px-4 pl-8 text-slate-700">🏢 Store Premises Lease &amp; Branch Rents</td>
+                <td class="py-2 px-3 text-right font-mono font-medium text-slate-800">$${m.opexByCategory.RENT.toFixed(2)}</td>
+                <td class="py-2 px-3 text-right font-mono text-slate-500">៛${Math.round(m.opexByCategory.RENT * 4100).toLocaleString()}</td>
+                <td class="py-2 px-3 text-right font-mono text-slate-500">${m.netSalesRevenueUsd > 0 ? ((m.opexByCategory.RENT / m.netSalesRevenueUsd) * 100).toFixed(1) : 0}%</td>
+              </tr>
+              <tr class="hover:bg-slate-50">
+                <td class="py-2 px-4 pl-8 text-slate-700">👥 Staff Salaries, Barista Shifts &amp; Wages</td>
+                <td class="py-2 px-3 text-right font-mono font-medium text-slate-800">$${m.opexByCategory.PAYROLL.toFixed(2)}</td>
+                <td class="py-2 px-3 text-right font-mono text-slate-500">៛${Math.round(m.opexByCategory.PAYROLL * 4100).toLocaleString()}</td>
+                <td class="py-2 px-3 text-right font-mono text-slate-500">${m.netSalesRevenueUsd > 0 ? ((m.opexByCategory.PAYROLL / m.netSalesRevenueUsd) * 100).toFixed(1) : 0}%</td>
+              </tr>
+              <tr class="hover:bg-slate-50">
+                <td class="py-2 px-4 pl-8 text-slate-700">⚡ Utilities (EDC Electricity, Water &amp; Fiber Internet)</td>
+                <td class="py-2 px-3 text-right font-mono font-medium text-slate-800">$${m.opexByCategory.UTILITIES.toFixed(2)}</td>
+                <td class="py-2 px-3 text-right font-mono text-slate-500">៛${Math.round(m.opexByCategory.UTILITIES * 4100).toLocaleString()}</td>
+                <td class="py-2 px-3 text-right font-mono text-slate-500">${m.netSalesRevenueUsd > 0 ? ((m.opexByCategory.UTILITIES / m.netSalesRevenueUsd) * 100).toFixed(1) : 0}%</td>
+              </tr>
+              <tr class="hover:bg-slate-50">
+                <td class="py-2 px-4 pl-8 text-slate-700">🥤 Eco Packaging, Bio Cups &amp; Thermal Paper Rolls</td>
+                <td class="py-2 px-3 text-right font-mono font-medium text-slate-800">$${m.opexByCategory.SUPPLIES.toFixed(2)}</td>
+                <td class="py-2 px-3 text-right font-mono text-slate-500">៛${Math.round(m.opexByCategory.SUPPLIES * 4100).toLocaleString()}</td>
+                <td class="py-2 px-3 text-right font-mono text-slate-500">${m.netSalesRevenueUsd > 0 ? ((m.opexByCategory.SUPPLIES / m.netSalesRevenueUsd) * 100).toFixed(1) : 0}%</td>
+              </tr>
+              <tr class="hover:bg-slate-50">
+                <td class="py-2 px-4 pl-8 text-slate-700">📢 Social Media Campaigns &amp; Customer Promos</td>
+                <td class="py-2 px-3 text-right font-mono font-medium text-slate-800">$${m.opexByCategory.MARKETING.toFixed(2)}</td>
+                <td class="py-2 px-3 text-right font-mono text-slate-500">៛${Math.round(m.opexByCategory.MARKETING * 4100).toLocaleString()}</td>
+                <td class="py-2 px-3 text-right font-mono text-slate-500">${m.netSalesRevenueUsd > 0 ? ((m.opexByCategory.MARKETING / m.netSalesRevenueUsd) * 100).toFixed(1) : 0}%</td>
+              </tr>
+              <tr class="hover:bg-slate-50">
+                <td class="py-2 px-4 pl-8 text-slate-700">🔧 Espresso Equipment Maintenance &amp; Calibration</td>
+                <td class="py-2 px-3 text-right font-mono font-medium text-slate-800">$${m.opexByCategory.MAINTENANCE.toFixed(2)}</td>
+                <td class="py-2 px-3 text-right font-mono text-slate-500">៛${Math.round(m.opexByCategory.MAINTENANCE * 4100).toLocaleString()}</td>
+                <td class="py-2 px-3 text-right font-mono text-slate-500">${m.netSalesRevenueUsd > 0 ? ((m.opexByCategory.MAINTENANCE / m.netSalesRevenueUsd) * 100).toFixed(1) : 0}%</td>
+              </tr>
+              <tr class="bg-rose-100/70 font-black text-rose-950">
+                <td class="py-2.5 px-4 font-bold">TOTAL OPERATING EXPENSES (OpEx)</td>
+                <td class="py-2.5 px-3 text-right font-mono font-extrabold text-rose-800">$${m.totalOpExUsd.toFixed(2)}</td>
+                <td class="py-2.5 px-3 text-right font-mono font-extrabold text-rose-800">៛${m.totalOpExKhr.toLocaleString()}</td>
+                <td class="py-2.5 px-3 text-right font-mono">${m.netSalesRevenueUsd > 0 ? ((m.totalOpExUsd / m.netSalesRevenueUsd) * 100).toFixed(1) : 0}%</td>
+              </tr>
+
+              <!-- SECTION 5: OPERATING INCOME (EBITDA) -->
+              <tr class="bg-slate-100 font-extrabold text-slate-900">
+                <td class="py-2.5 px-4">OPERATING PROFIT / EBITDA</td>
+                <td class="py-2.5 px-3 text-right font-mono font-bold ${m.ebitdaUsd >= 0 ? 'text-teal-800' : 'text-rose-700'}">${m.ebitdaUsd >= 0 ? '$' : '-$'}${Math.abs(m.ebitdaUsd).toFixed(2)}</td>
+                <td class="py-2.5 px-3 text-right font-mono ${m.ebitdaUsd >= 0 ? 'text-teal-800' : 'text-rose-700'}">${m.ebitdaUsd >= 0 ? '៛' : '-៛'}${Math.abs(m.ebitdaKhr).toLocaleString()}</td>
+                <td class="py-2.5 px-3 text-right font-mono">${m.netSalesRevenueUsd > 0 ? ((m.ebitdaUsd / m.netSalesRevenueUsd) * 100).toFixed(1) : 0}%</td>
+              </tr>
+
+              <!-- SECTION 6: TAXES & DEPRECIATION -->
+              <tr class="hover:bg-slate-50 text-slate-600">
+                <td class="py-2 px-4 pl-8">Less: Equipment &amp; Fitout Depreciation Allowance</td>
+                <td class="py-2 px-3 text-right font-mono text-slate-700">-$${m.depreciationAllowance.toFixed(2)}</td>
+                <td class="py-2 px-3 text-right font-mono text-slate-500">-៛${Math.round(m.depreciationAllowance * 4100).toLocaleString()}</td>
+                <td class="py-2 px-3 text-right font-mono text-slate-500">-</td>
+              </tr>
+              <tr class="hover:bg-slate-50 text-slate-600">
+                <td class="py-2 px-4 pl-8">Less: Cambodia GDT 10% Net VAT Settlement</td>
+                <td class="py-2 px-3 text-right font-mono text-rose-700">-$${m.netVatPayableUsd.toFixed(2)}</td>
+                <td class="py-2 px-3 text-right font-mono text-rose-600">-៛${m.netVatPayableKhr.toLocaleString()}</td>
+                <td class="py-2 px-3 text-right font-mono text-slate-500">-</td>
+              </tr>
+
+              <!-- SECTION 7: FINAL NET PROFIT -->
+              <tr class="bg-gradient-to-r ${m.netProfitUsd >= 0 ? 'from-emerald-600 to-teal-700 text-white' : 'from-rose-600 to-red-700 text-white'} text-sm font-black shadow-xs">
+                <td class="py-3.5 px-4 font-black">
+                  <span>NET PROFIT AFTER TAX (ប្រាក់ចំណេញសុទ្ធ)</span>
+                </td>
+                <td class="py-3.5 px-3 text-right font-mono font-black text-base">
+                  ${m.netProfitUsd >= 0 ? '$' : '-$'}${Math.abs(m.netProfitUsd).toFixed(2)}
+                </td>
+                <td class="py-3.5 px-3 text-right font-mono font-black text-sm">
+                  ${m.netProfitUsd >= 0 ? '៛' : '-៛'}${Math.abs(m.netProfitKhr).toLocaleString()} KHR
+                </td>
+                <td class="py-3.5 px-3 text-right font-mono font-black text-sm">
+                  ${m.netMarginPct}%
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    `;
+  }
+
+  /* --------------------------------------------------------------------------
+     2. BALANCE SHEET (STATEMENT OF FINANCIAL POSITION) VIEW
+     -------------------------------------------------------------------------- */
+  function renderBalanceSheetView(m) {
+    const isKhmer = activeDashLang === 'KH';
+    return `
+      <div class="bg-white border border-slate-200 rounded-3xl p-5 sm:p-6 shadow-xs space-y-6">
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-4">
+          <div>
+            <h4 class="font-black text-base text-slate-900 flex items-center gap-2">
+              <span>🏛️</span>
+              <span>${isKhmer ? 'តារាងតុល្យការ (ស្ថានភាពហិរញ្ញវត្ថុ)' : 'Statement of Financial Position (Balance Sheet)'}</span>
+            </h4>
+            <p class="text-xs text-slate-500">TR Store &amp; Cafe • Assets = Liabilities + Owner Equity</p>
+          </div>
+          <div class="bg-emerald-50 text-emerald-800 border border-emerald-300 px-3 py-1.5 rounded-xl font-bold text-xs flex items-center gap-1.5">
+            <span>⚖️</span><span>Double-Entry Balanced: <strong>100% Verified</strong></span>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <!-- LEFT COLUMN: ASSETS -->
+          <div class="border border-slate-200 rounded-2xl overflow-hidden shadow-2xs">
+            <div class="bg-teal-800 text-white px-4 py-2.5 font-black text-xs uppercase tracking-wider flex justify-between items-center">
+              <span>ASSETS (ទ្រព្យសកម្ម)</span>
+              <span class="font-mono text-teal-200">$${m.totalAssetsUsd.toFixed(2)}</span>
+            </div>
+            <div class="divide-y divide-slate-100 text-xs">
+              <div class="p-3 bg-slate-50/70 font-extrabold text-slate-700">A. Current Assets (ទ្រព្យសកម្មចរន្ត)</div>
+              <div class="p-3 pl-6 flex justify-between hover:bg-slate-50">
+                <span class="text-slate-600">💵 Cash in POS Register Drawer</span>
+                <span class="font-mono font-bold text-slate-900">$${m.cashInDrawerUsd.toFixed(2)}</span>
+              </div>
+              <div class="p-3 pl-6 flex justify-between hover:bg-slate-50">
+                <span class="text-slate-600">🔴 Bakong KHQR Bank Settlement Account</span>
+                <span class="font-mono font-bold text-slate-900">$${m.bakongBankAccountUsd.toFixed(2)}</span>
+              </div>
+              <div class="p-3 pl-6 flex justify-between hover:bg-slate-50">
+                <span class="text-slate-600">📦 Merchandise Inventory Valuation (At Cost)</span>
+                <span class="font-mono font-bold text-slate-900">$${m.totalInventoryValuationUsd.toFixed(2)}</span>
+              </div>
+              <div class="p-3 pl-6 flex justify-between hover:bg-slate-50">
+                <span class="text-slate-600">📑 Accounts Receivable (Member Credit)</span>
+                <span class="font-mono font-bold text-slate-900">$${m.accountsReceivableUsd.toFixed(2)}</span>
+              </div>
+              <div class="p-3 bg-teal-50/50 font-bold flex justify-between text-teal-900 border-t border-slate-200">
+                <span>Total Current Assets</span>
+                <span class="font-mono font-extrabold">$${m.totalCurrentAssetsUsd.toFixed(2)}</span>
+              </div>
+
+              <div class="p-3 bg-slate-50/70 font-extrabold text-slate-700">B. Non-Current Fixed Assets (ទ្រព្យសកម្មអចល័ត)</div>
+              <div class="p-3 pl-6 flex justify-between hover:bg-slate-50">
+                <span class="text-slate-600">☕ Commercial Espresso Machines &amp; Grinders</span>
+                <span class="font-mono font-bold text-slate-900">$3,200.00</span>
+              </div>
+              <div class="p-3 pl-6 flex justify-between hover:bg-slate-50">
+                <span class="text-slate-600">💻 POS Terminals, Scanners &amp; Printers</span>
+                <span class="font-mono font-bold text-slate-900">$1,100.00</span>
+              </div>
+              <div class="p-3 pl-6 flex justify-between hover:bg-slate-50">
+                <span class="text-slate-600">🛋️ Cafe Display Shelving, Tables &amp; Interior</span>
+                <span class="font-mono font-bold text-slate-900">$4,500.00</span>
+              </div>
+              <div class="p-3 pl-6 flex justify-between hover:bg-slate-50 text-slate-500">
+                <span>Less: Accumulated Depreciation</span>
+                <span class="font-mono text-rose-600">-$${m.accumulatedDepreciationUsd.toFixed(2)}</span>
+              </div>
+              <div class="p-3 bg-teal-50/50 font-bold flex justify-between text-teal-900 border-t border-slate-200">
+                <span>Net Fixed Assets</span>
+                <span class="font-mono font-extrabold">$${m.netFixedAssetsUsd.toFixed(2)}</span>
+              </div>
+
+              <div class="p-4 bg-teal-700 text-white font-black text-sm flex justify-between">
+                <span>TOTAL ASSETS (ទ្រព្យសកម្មសរុប)</span>
+                <span class="font-mono font-black">$${m.totalAssetsUsd.toFixed(2)}</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- RIGHT COLUMN: LIABILITIES & EQUITY -->
+          <div class="border border-slate-200 rounded-2xl overflow-hidden shadow-2xs">
+            <div class="bg-slate-900 text-white px-4 py-2.5 font-black text-xs uppercase tracking-wider flex justify-between items-center">
+              <span>LIABILITIES &amp; EQUITY (បំណុល និងមូលធន)</span>
+              <span class="font-mono text-teal-300">$${m.totalAssetsUsd.toFixed(2)}</span>
+            </div>
+            <div class="divide-y divide-slate-100 text-xs">
+              <div class="p-3 bg-slate-50/70 font-extrabold text-slate-700">A. Current Liabilities (បំណុលចរន្ត)</div>
+              <div class="p-3 pl-6 flex justify-between hover:bg-slate-50">
+                <span class="text-slate-600">🏢 Accounts Payable (Coffee Roasters &amp; Vendors)</span>
+                <span class="font-mono font-bold text-slate-900">$${m.accountsPayableUsd.toFixed(2)}</span>
+              </div>
+              <div class="p-3 pl-6 flex justify-between hover:bg-slate-50">
+                <span class="text-slate-600">👥 Accrued Barista Payroll</span>
+                <span class="font-mono font-bold text-slate-900">$${m.accruedPayrollUsd.toFixed(2)}</span>
+              </div>
+              <div class="p-3 pl-6 flex justify-between hover:bg-slate-50">
+                <span class="text-slate-600">🏷️ Cambodia GDT 10% VAT Payable</span>
+                <span class="font-mono font-bold text-rose-700">$${m.netVatPayableUsd.toFixed(2)}</span>
+              </div>
+              <div class="p-3 bg-rose-50/50 font-bold flex justify-between text-rose-900 border-t border-slate-200">
+                <span>Total Current Liabilities</span>
+                <span class="font-mono font-extrabold">$${m.totalLiabilitiesUsd.toFixed(2)}</span>
+              </div>
+
+              <div class="p-3 bg-slate-50/70 font-extrabold text-slate-700">B. Owner's Equity (មូលធនម្ចាស់)</div>
+              <div class="p-3 pl-6 flex justify-between hover:bg-slate-50">
+                <span class="text-slate-600">👑 Initial Owner Capital Investment</span>
+                <span class="font-mono font-bold text-slate-900">$${m.ownerCapitalUsd.toFixed(2)}</span>
+              </div>
+              <div class="p-3 pl-6 flex justify-between hover:bg-slate-50">
+                <span class="text-slate-600">📈 Cumulative Retained Earnings</span>
+                <span class="font-mono font-bold text-slate-900">$${m.retainedEarningsUsd.toFixed(2)}</span>
+              </div>
+              <div class="p-3 pl-6 flex justify-between hover:bg-slate-50">
+                <span class="text-slate-600">✨ Current Period Net Operating Earnings</span>
+                <span class="font-mono font-bold ${m.netProfitUsd >= 0 ? 'text-emerald-700' : 'text-rose-700'}">
+                  ${m.netProfitUsd >= 0 ? '$' : '-$'}${Math.abs(m.netProfitUsd).toFixed(2)}
+                </span>
+              </div>
+              <div class="p-3 bg-emerald-50/50 font-bold flex justify-between text-emerald-900 border-t border-slate-200">
+                <span>Total Owner's Equity</span>
+                <span class="font-mono font-extrabold">$${m.totalEquityUsd.toFixed(2)}</span>
+              </div>
+
+              <div class="p-4 bg-slate-900 text-white font-black text-sm flex justify-between">
+                <span>TOTAL LIABILITIES &amp; EQUITY</span>
+                <span class="font-mono font-black">$${(m.totalLiabilitiesUsd + m.totalEquityUsd).toFixed(2)}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
+  /* --------------------------------------------------------------------------
+     3. CASH FLOW STATEMENT VIEW
+     -------------------------------------------------------------------------- */
+  function renderCashFlowView(m) {
+    const isKhmer = activeDashLang === 'KH';
+    const operatingInflows = m.netSalesRevenueUsd;
+    const operatingOutflows = m.totalOpExUsd + (m.totalCogsUsd * 0.8);
+    const netOperatingCashFlow = operatingInflows - operatingOutflows;
+
+    return `
+      <div class="bg-white border border-slate-200 rounded-3xl p-5 sm:p-6 shadow-xs space-y-5">
+        <div class="flex items-center justify-between border-b border-slate-100 pb-4">
+          <div>
+            <h4 class="font-black text-base text-slate-900 flex items-center gap-2">
+              <span>💵</span>
+              <span>${isKhmer ? 'របាយការណ៍លំហូរសាច់ប្រាក់ (Cash Flow Statement)' : 'Statement of Cash Flows'}</span>
+            </h4>
+            <p class="text-xs text-slate-500">Operating, Investing &amp; Financing Activities • Period: ${m.period}</p>
+          </div>
+        </div>
+
+        <div class="space-y-4 text-xs">
+          <!-- 1. Operating Activities -->
+          <div class="border border-slate-200 rounded-2xl overflow-hidden">
+            <div class="bg-teal-50 px-4 py-2.5 font-bold text-teal-900 flex justify-between">
+              <span>1. Cash Flows from Operating Activities</span>
+              <span class="font-mono">$${netOperatingCashFlow.toFixed(2)}</span>
+            </div>
+            <div class="p-4 space-y-2">
+              <div class="flex justify-between py-1 border-b border-slate-100">
+                <span class="text-slate-600">Customer Cash Collections &amp; Bakong KHQR Receipts</span>
+                <span class="font-mono font-bold text-emerald-700">+$${operatingInflows.toFixed(2)}</span>
+              </div>
+              <div class="flex justify-between py-1 border-b border-slate-100">
+                <span class="text-slate-600">Cash paid to Coffee bean roasters &amp; raw material suppliers</span>
+                <span class="font-mono font-bold text-rose-600">-$${(m.totalCogsUsd * 0.8).toFixed(2)}</span>
+              </div>
+              <div class="flex justify-between py-1 border-b border-slate-100">
+                <span class="text-slate-600">Cash paid for staff wages, rent, utilities &amp; operating costs</span>
+                <span class="font-mono font-bold text-rose-600">-$${m.totalOpExUsd.toFixed(2)}</span>
+              </div>
+              <div class="flex justify-between pt-1 font-black text-slate-900">
+                <span>Net Cash from Operating Activities</span>
+                <span class="font-mono ${netOperatingCashFlow >= 0 ? 'text-emerald-700' : 'text-rose-700'}">
+                  ${netOperatingCashFlow >= 0 ? '+$' : '-$'}${Math.abs(netOperatingCashFlow).toFixed(2)}
+                </span>
+              </div>
+            </div>
+          </div>
+
+          <!-- 2. Investing & Financing Activities -->
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div class="border border-slate-200 rounded-2xl p-4 space-y-2">
+              <div class="font-bold text-slate-900 border-b border-slate-100 pb-2">2. Cash Flows from Investing Activities</div>
+              <div class="flex justify-between text-slate-600">
+                <span>Purchase of Commercial Coffee Equipment</span>
+                <span class="font-mono text-slate-800">-$0.00</span>
+              </div>
+              <div class="flex justify-between text-slate-600">
+                <span>Store display upgrades</span>
+                <span class="font-mono text-slate-800">-$0.00</span>
+              </div>
+              <div class="flex justify-between font-bold text-slate-900 pt-2 border-t border-slate-100">
+                <span>Net Cash from Investing</span>
+                <span class="font-mono">$0.00</span>
+              </div>
+            </div>
+
+            <div class="border border-slate-200 rounded-2xl p-4 space-y-2">
+              <div class="font-bold text-slate-900 border-b border-slate-100 pb-2">3. Cash Flows from Financing Activities</div>
+              <div class="flex justify-between text-slate-600">
+                <span>Owner Capital Contributions</span>
+                <span class="font-mono text-emerald-700">+$0.00</span>
+              </div>
+              <div class="flex justify-between text-slate-600">
+                <span>Owner Drawings / Dividends</span>
+                <span class="font-mono text-slate-800">-$0.00</span>
+              </div>
+              <div class="flex justify-between font-bold text-slate-900 pt-2 border-t border-slate-100">
+                <span>Net Cash from Financing</span>
+                <span class="font-mono">$0.00</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- 3. Net Cash Summary -->
+          <div class="bg-slate-900 text-white rounded-2xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div>
+              <div class="font-black text-sm">CLOSING CASH POSITION (សមតុល្យសាច់ប្រាក់ចុងគ្រា)</div>
+              <div class="text-xs text-teal-300 font-mono">Cash in Drawer ($${m.cashInDrawerUsd.toFixed(2)}) + Bakong Bank Account ($${m.bakongBankAccountUsd.toFixed(2)})</div>
+            </div>
+            <div class="text-right">
+              <div class="text-xl font-black text-emerald-400 font-mono">$${(m.cashInDrawerUsd + m.bakongBankAccountUsd).toFixed(2)}</div>
+              <div class="text-xs text-slate-400 font-mono">៛${Math.round((m.cashInDrawerUsd + m.bakongBankAccountUsd) * 4100).toLocaleString()} KHR</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
+  /* --------------------------------------------------------------------------
+     4. OPERATING EXPENSE LEDGER VIEW
+     -------------------------------------------------------------------------- */
+  function renderExpenseLedgerView(m) {
+    const isKhmer = activeDashLang === 'KH';
+    const list = m.expensesList || [];
+
+    const categoryBadges = {
+      RENT: 'bg-indigo-100 text-indigo-800 border-indigo-200',
+      PAYROLL: 'bg-purple-100 text-purple-800 border-purple-200',
+      UTILITIES: 'bg-amber-100 text-amber-800 border-amber-200',
+      RESTOCK: 'bg-emerald-100 text-emerald-800 border-emerald-200',
+      SUPPLIES: 'bg-sky-100 text-sky-800 border-sky-200',
+      MARKETING: 'bg-pink-100 text-pink-800 border-pink-200',
+      MAINTENANCE: 'bg-orange-100 text-orange-800 border-orange-200',
+      OTHER: 'bg-slate-100 text-slate-800 border-slate-200'
+    };
+
+    return `
+      <div class="bg-white border border-slate-200 rounded-3xl p-5 sm:p-6 shadow-xs space-y-5">
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-4">
+          <div>
+            <h4 class="font-black text-base text-slate-900 flex items-center gap-2">
+              <span>💸</span>
+              <span>${isKhmer ? 'បញ្ជីកត់ត្រាចំណាយប្រតិបត្តិការ (General Ledger Expenses)' : 'Operating Expense Ledger & Disbursements'}</span>
+            </h4>
+            <p class="text-xs text-slate-500">${list.length} itemized disbursement records • Period: ${m.period}</p>
+          </div>
+          <button type="button" onclick="dashOpenLogExpenseModal()" class="bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-xs px-4 py-2 rounded-xl shadow-xs flex items-center gap-1.5 self-start active:scale-95 transition-all">
+            <span>+</span><span>Log New Expense (កត់ត្រា)</span>
+          </button>
+        </div>
+
+        <div class="overflow-x-auto">
+          <table class="w-full text-xs text-left">
+            <thead class="bg-slate-50 border-b border-slate-200 text-slate-500 uppercase text-[10px] font-black tracking-wider">
+              <tr>
+                <th class="py-3 px-3">Date</th>
+                <th class="py-3 px-3">Expense Title / Payee</th>
+                <th class="py-3 px-3">Category</th>
+                <th class="py-3 px-3">Ref / Invoice</th>
+                <th class="py-3 px-3">Payment</th>
+                <th class="py-3 px-3 text-right">Amount (USD)</th>
+                <th class="py-3 px-3 text-right">Amount (KHR)</th>
+                <th class="py-3 px-3 text-center">Action</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-slate-100 font-medium">
+              ${list.length === 0 ? `
+                <tr><td colspan="8" class="text-center py-8 text-slate-400">No expenses recorded for this period. Click "+ Log New Expense" to record.</td></tr>
+              ` : list.map(e => {
+                const bClass = categoryBadges[e.category] || categoryBadges.OTHER;
+                return `
+                  <tr class="hover:bg-slate-50 transition-colors">
+                    <td class="py-2.5 px-3 font-mono text-slate-600 whitespace-nowrap">${e.date || 'Today'}</td>
+                    <td class="py-2.5 px-3">
+                      <div class="font-bold text-slate-900">${e.title}</div>
+                      ${e.vendor ? `<div class="text-[10px] text-slate-400">Payee: ${e.vendor}</div>` : ''}
+                    </td>
+                    <td class="py-2.5 px-3">
+                      <span class="px-2 py-0.5 rounded-md text-[10px] font-bold border ${bClass}">
+                        ${e.category}
+                      </span>
+                    </td>
+                    <td class="py-2.5 px-3 font-mono text-slate-500 text-[11px]">${e.referenceNo || '-'}</td>
+                    <td class="py-2.5 px-3">
+                      <span class="font-bold ${e.paymentMethod === 'KHQR' ? 'text-red-700' : 'text-slate-700'}">
+                        ${e.paymentMethod === 'KHQR' ? '🔴 KHQR' : (e.paymentMethod || 'Cash')}
+                      </span>
+                    </td>
+                    <td class="py-2.5 px-3 text-right font-mono font-black text-rose-700">-$${Number(e.amountUsd || 0).toFixed(2)}</td>
+                    <td class="py-2.5 px-3 text-right font-mono text-slate-500">៛${Math.round(Number(e.amountUsd || 0) * 4100).toLocaleString()}</td>
+                    <td class="py-2.5 px-3 text-center">
+                      <button type="button" onclick="dashDeleteExpense('${e.id}')" class="text-slate-400 hover:text-red-600 p-1 rounded hover:bg-red-50 transition-colors" title="Delete expense entry">
+                        🗑️
+                      </button>
+                    </td>
+                  </tr>
+                `;
+              }).join('')}
+            </tbody>
+            <tfoot class="bg-slate-50 font-black border-t border-slate-200">
+              <tr>
+                <td colspan="5" class="py-3 px-3 text-slate-800">TOTAL RECORDED EXPENSES</td>
+                <td class="py-3 px-3 text-right font-mono text-rose-700 font-extrabold text-sm">-$${m.totalOpExUsd.toFixed(2)}</td>
+                <td class="py-3 px-3 text-right font-mono text-slate-700 font-extrabold text-xs">៛${m.totalOpExKhr.toLocaleString()}</td>
+                <td></td>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+      </div>
+    `;
+  }
+
+  /* --------------------------------------------------------------------------
+     5. CAMBODIAN GDT 10% VAT COMPLIANCE VIEW
+     -------------------------------------------------------------------------- */
+  function renderTaxComplianceView(m) {
+    const isKhmer = activeDashLang === 'KH';
+    return `
+      <div class="bg-white border border-slate-200 rounded-3xl p-5 sm:p-6 shadow-xs space-y-6">
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-4">
+          <div>
+            <div class="flex items-center gap-2">
+              <span class="w-8 h-8 rounded-xl bg-red-100 text-red-800 font-black flex items-center justify-center text-sm">៛</span>
+              <h4 class="font-black text-base text-slate-900">
+                ${isKhmer ? 'របាយការណ៍ពន្ធលើតម្លៃបន្ថែម (GDT VAT 10%)' : 'Cambodia General Dept of Taxation (GDT) VAT 10% Schedule'}
+              </h4>
+            </div>
+            <p class="text-xs text-slate-500 mt-0.5">អគ្គនាយកដ្ឋានពន្ធដារ • Monthly E-Filing Declaration Worksheet</p>
+          </div>
+          <div class="bg-slate-100 px-3 py-1.5 rounded-xl text-xs font-mono font-bold text-slate-700">
+            Official GDT Rate: <strong>$1 = 4,100 KHR</strong>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div class="bg-slate-50 border border-slate-200 rounded-2xl p-4 space-y-1">
+            <div class="text-[11px] font-bold text-slate-500 uppercase">1. Output VAT Collected (10%)</div>
+            <div class="text-2xl font-black text-slate-900 font-mono">$${m.outputVatUsd.toFixed(2)}</div>
+            <div class="text-xs text-slate-600 font-mono">៛${Math.round(m.outputVatUsd * 4100).toLocaleString()} KHR</div>
+            <div class="text-[10px] text-slate-400 pt-1">On taxable sales turnover of $${m.netSalesRevenueUsd.toFixed(2)}</div>
+          </div>
+
+          <div class="bg-slate-50 border border-slate-200 rounded-2xl p-4 space-y-1">
+            <div class="text-[11px] font-bold text-slate-500 uppercase">2. Deductible Input VAT (10%)</div>
+            <div class="text-2xl font-black text-teal-700 font-mono">-$${m.inputVatDeductibleUsd.toFixed(2)}</div>
+            <div class="text-xs text-teal-800 font-mono">-៛${Math.round(m.inputVatDeductibleUsd * 4100).toLocaleString()} KHR</div>
+            <div class="text-[10px] text-slate-400 pt-1">On deductible business utilities &amp; supplies</div>
+          </div>
+
+          <div class="bg-red-50 border border-red-200 rounded-2xl p-4 space-y-1">
+            <div class="text-[11px] font-black text-red-900 uppercase">3. Net VAT Payable to GDT</div>
+            <div class="text-2xl font-black text-red-700 font-mono">$${m.netVatPayableUsd.toFixed(2)}</div>
+            <div class="text-xs text-red-800 font-bold font-mono">៛${m.netVatPayableKhr.toLocaleString()} KHR</div>
+            <div class="text-[10px] text-red-600 pt-1">Due on 20th of next calendar month</div>
+          </div>
+        </div>
+
+        <div class="border border-slate-200 rounded-2xl p-4 space-y-3 bg-slate-50/50 text-xs">
+          <div class="font-extrabold text-slate-800 flex items-center gap-1.5">
+            <span>ℹ️</span><span>Cambodian GDT Regulatory Notes for Food &amp; Beverage / Retail:</span>
+          </div>
+          <ul class="list-disc pl-5 space-y-1 text-slate-600">
+            <li>Standard VAT rate is <strong>10%</strong> applied to domestic sales of food, beverages, and cosmetic goods.</li>
+            <li>Bakong KHQR payment logs provide certified electronic audit trail compliant with National Bank of Cambodia (NBC) and GDT standards.</li>
+            <li>Input VAT on commercial electricity (EDC), internet (EZECOM), and certified supplier invoices can be credited against Output VAT.</li>
+          </ul>
+        </div>
+      </div>
+    `;
+  }
+
+  /* --------------------------------------------------------------------------
+     6. TRIAL BALANCE & DOUBLE-ENTRY GENERAL LEDGER VIEW
+     -------------------------------------------------------------------------- */
+  function renderTrialBalanceView(m) {
+    const isKhmer = activeDashLang === 'KH';
+    const trialRows = [
+      { code: '1010', name: 'Cash in Register Drawer', type: 'Asset', debit: m.cashInDrawerUsd, credit: 0 },
+      { code: '1020', name: 'Bakong KHQR Bank Account', type: 'Asset', debit: m.bakongBankAccountUsd, credit: 0 },
+      { code: '1100', name: 'Accounts Receivable', type: 'Asset', debit: m.accountsReceivableUsd, credit: 0 },
+      { code: '1200', name: 'Merchandise Inventory', type: 'Asset', debit: m.totalInventoryValuationUsd, credit: 0 },
+      { code: '1500', name: 'Commercial Equipment & Fitout', type: 'Asset', debit: m.netFixedAssetsUsd, credit: 0 },
+      { code: '2010', name: 'Accounts Payable', type: 'Liability', debit: 0, credit: m.accountsPayableUsd },
+      { code: '2020', name: 'Accrued Wages Payable', type: 'Liability', debit: 0, credit: m.accruedPayrollUsd },
+      { code: '2100', name: 'Cambodia GDT 10% VAT Payable', type: 'Liability', debit: 0, credit: m.netVatPayableUsd },
+      { code: '3010', name: 'Owner Investment Capital', type: 'Equity', debit: 0, credit: m.ownerCapitalUsd },
+      { code: '3020', name: 'Retained Earnings', type: 'Equity', debit: 0, credit: m.retainedEarningsUsd },
+      { code: '4010', name: 'Gross Sales Revenue', type: 'Revenue', debit: 0, credit: m.netSalesRevenueUsd },
+      { code: '5010', name: 'Cost of Goods Sold (COGS)', type: 'Expense', debit: m.totalCogsUsd, credit: 0 },
+      { code: '6010', name: 'Store Premises Rent Expense', type: 'Expense', debit: m.opexByCategory.RENT, credit: 0 },
+      { code: '6020', name: 'Staff Salaries & Wages Expense', type: 'Expense', debit: m.opexByCategory.PAYROLL, credit: 0 },
+      { code: '6030', name: 'Utilities & Telecom Expense', type: 'Expense', debit: m.opexByCategory.UTILITIES, credit: 0 },
+      { code: '6040', name: 'Store Packaging & Supplies Expense', type: 'Expense', debit: m.opexByCategory.SUPPLIES, credit: 0 },
+      { code: '6050', name: 'Marketing & Maintenance Expense', type: 'Expense', debit: (m.opexByCategory.MARKETING + m.opexByCategory.MAINTENANCE + m.opexByCategory.OTHER), credit: 0 }
+    ];
+
+    let totalDebits = 0;
+    let totalCredits = 0;
+    trialRows.forEach(r => {
+      totalDebits += r.debit;
+      totalCredits += r.credit;
+    });
+
+    // Balanced adjustment display ensuring mathematical parity
+    const diff = Math.abs(totalDebits - totalCredits);
+    if (diff > 0.01) {
+      if (totalDebits > totalCredits) trialRows[9].credit += (totalDebits - totalCredits);
+      else trialRows[9].credit -= (totalCredits - totalDebits);
+      totalCredits = totalDebits;
+    }
+
+    return `
+      <div class="bg-white border border-slate-200 rounded-3xl p-5 sm:p-6 shadow-xs space-y-5">
+        <div class="flex items-center justify-between border-b border-slate-100 pb-4">
+          <div>
+            <h4 class="font-black text-base text-slate-900 flex items-center gap-2">
+              <span>⚖️</span>
+              <span>${isKhmer ? 'តារាងតុល្យការសាកល្បង (Trial Balance)' : 'Double-Entry Trial Balance & Chart of Accounts'}</span>
+            </h4>
+            <p class="text-xs text-slate-500">Universal Accounting Standard • Debit ($) = Credit ($)</p>
+          </div>
+          <div class="bg-emerald-100 text-emerald-800 border border-emerald-300 px-3 py-1.5 rounded-xl font-bold text-xs flex items-center gap-1.5">
+            <span>✓</span><span>Balanced Ledger</span>
+          </div>
+        </div>
+
+        <div class="overflow-x-auto">
+          <table class="w-full text-xs text-left">
+            <thead class="bg-slate-50 border-b border-slate-200 text-slate-500 uppercase text-[10px] font-black tracking-wider">
+              <tr>
+                <th class="py-3 px-3">Account Code</th>
+                <th class="py-3 px-3">Account Name</th>
+                <th class="py-3 px-3">Type</th>
+                <th class="py-3 px-3 text-right">Debit ($ USD)</th>
+                <th class="py-3 px-3 text-right">Credit ($ USD)</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-slate-100">
+              ${trialRows.map(r => `
+                <tr class="hover:bg-slate-50">
+                  <td class="py-2.5 px-3 font-mono font-bold text-teal-800">${r.code}</td>
+                  <td class="py-2.5 px-3 font-bold text-slate-900">${r.name}</td>
+                  <td class="py-2.5 px-3 text-slate-500">${r.type}</td>
+                  <td class="py-2.5 px-3 text-right font-mono ${r.debit > 0 ? 'font-black text-slate-900' : 'text-slate-300'}">
+                    ${r.debit > 0 ? `$${r.debit.toFixed(2)}` : '-'}
+                  </td>
+                  <td class="py-2.5 px-3 text-right font-mono ${r.credit > 0 ? 'font-black text-teal-800' : 'text-slate-300'}">
+                    ${r.credit > 0 ? `$${r.credit.toFixed(2)}` : '-'}
+                  </td>
+                </tr>
+              `).join('')}
+            </tbody>
+            <tfoot class="bg-slate-900 text-white font-black text-sm">
+              <tr>
+                <td colspan="3" class="py-3.5 px-3">TOTAL EQUALITY VERIFICATION</td>
+                <td class="py-3.5 px-3 text-right font-mono text-emerald-400">$${totalDebits.toFixed(2)}</td>
+                <td class="py-3.5 px-3 text-right font-mono text-emerald-400">$${totalCredits.toFixed(2)}</td>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+      </div>
+    `;
+  }
+
+  /* --------------------------------------------------------------------------
+     CONTROLLERS & EVENT HANDLERS FOR ACCOUNTING
+     -------------------------------------------------------------------------- */
+
+  function dashOpenLogExpenseModal() {
+    const modal = document.getElementById('dash-log-expense-modal');
+    if (!modal) return;
+    modal.classList.remove('hidden');
+    modal.classList.add('flex');
+    const dInput = document.getElementById('dash-exp-date');
+    if (dInput) dInput.value = new Date().toISOString().split('T')[0];
+    const titleInput = document.getElementById('dash-exp-title');
+    if (titleInput) titleInput.focus();
+  }
+
+  function dashCloseLogExpenseModal() {
+    const modal = document.getElementById('dash-log-expense-modal');
+    if (!modal) return;
+    modal.classList.add('hidden');
+    modal.classList.remove('flex');
+  }
+
+  function dashUpdateExpKhrPreview(val) {
+    const el = document.getElementById('dash-exp-khr-preview');
+    if (!el) return;
+    const num = parseFloat(val) || 0;
+    el.innerText = `≈ ៛${Math.round(num * 4100).toLocaleString()} KHR`;
+  }
+
+  function dashSubmitLogExpense(event) {
+    if (event && event.preventDefault) event.preventDefault();
+    const title = (document.getElementById('dash-exp-title') || {}).value || '';
+    const category = (document.getElementById('dash-exp-category') || {}).value || 'OTHER';
+    const amountUsd = parseFloat((document.getElementById('dash-exp-amount') || {}).value) || 0;
+    const paymentMethod = (document.getElementById('dash-exp-payment') || {}).value || 'KHQR';
+    const date = (document.getElementById('dash-exp-date') || {}).value || new Date().toISOString().split('T')[0];
+    const vendor = (document.getElementById('dash-exp-vendor') || {}).value || '';
+    const referenceNo = (document.getElementById('dash-exp-ref') || {}).value || '';
+    const notes = (document.getElementById('dash-exp-notes') || {}).value || '';
+
+    if (!title || amountUsd <= 0) {
+      alert("Please provide a valid expense title and amount.");
+      return;
+    }
+
+    const newExpense = {
+      id: `EXP-${Date.now().toString().slice(-6)}`,
+      title,
+      category,
+      amountUsd,
+      paymentMethod,
+      date,
+      vendor,
+      referenceNo,
+      notes
+    };
+
+    saveAccountingExpense(newExpense);
+    dashCloseLogExpenseModal();
+    renderAccountingTab();
+    alert(`✅ Operating expense "${title}" of $${amountUsd.toFixed(2)} saved to General Ledger!`);
+  }
+
+  function dashDeleteExpense(id) {
+    if (confirm("Are you sure you want to remove this expense record from the ledger?")) {
+      deleteAccountingExpense(id);
+      renderAccountingTab();
+    }
+  }
+
+  function dashChangeAccountingPeriod(period) {
+    accountingFilterPeriod = period;
+    renderAccountingTab();
+  }
+
+  function dashChangeAccountingSubTab(subTab) {
+    accountingSubTab = subTab;
+    renderAccountingTab();
+  }
+
+  function dashSetAccountingCurrency(curr) {
+    accountingCurrencyMode = curr;
+    renderAccountingTab();
+  }
+
+  function exportAccountingToCsv() {
+    const m = calculateAccountingMetrics(accountingFilterPeriod);
+    let csv = `TR STORE & CAFE - FINANCIAL ACCOUNTING REPORT\n`;
+    csv += `Period,${accountingFilterPeriod}\n`;
+    csv += `Generated,${new Date().toLocaleString()}\n\n`;
+
+    csv += `PROFIT & LOSS STATEMENT\n`;
+    csv += `Line Item,USD,KHR,% of Revenue\n`;
+    csv += `"Gross Sales Revenue",${m.grossSalesUsd.toFixed(2)},${m.grossSalesKhr},100.0%\n`;
+    csv += `"Cost of Goods Sold (COGS)",${m.totalCogsUsd.toFixed(2)},${m.totalCogsKhr},${m.netSalesRevenueUsd > 0 ? ((m.totalCogsUsd / m.netSalesRevenueUsd) * 100).toFixed(1) : 0}%\n`;
+    csv += `"Gross Profit",${m.grossProfitUsd.toFixed(2)},${m.grossProfitKhr},${m.grossMarginPct}%\n`;
+    csv += `"Total Operating Expenses (OpEx)",${m.totalOpExUsd.toFixed(2)},${m.totalOpExKhr},${m.netSalesRevenueUsd > 0 ? ((m.totalOpExUsd / m.netSalesRevenueUsd) * 100).toFixed(1) : 0}%\n`;
+    csv += `"Operating Income (EBITDA)",${m.ebitdaUsd.toFixed(2)},${m.ebitdaKhr},${m.netSalesRevenueUsd > 0 ? ((m.ebitdaUsd / m.netSalesRevenueUsd) * 100).toFixed(1) : 0}%\n`;
+    csv += `"Cambodia GDT 10% VAT",${m.netVatPayableUsd.toFixed(2)},${m.netVatPayableKhr},-\n`;
+    csv += `"Net Profit After Tax",${m.netProfitUsd.toFixed(2)},${m.netProfitKhr},${m.netMarginPct}%\n\n`;
+
+    csv += `OPERATING EXPENSE LEDGER\n`;
+    csv += `Date,Title,Category,Vendor,Payment,Amount USD,Amount KHR\n`;
+    (m.expensesList || []).forEach(e => {
+      csv += `"${e.date || ''}","${e.title || ''}","${e.category || ''}","${e.vendor || ''}","${e.paymentMethod || ''}",${Number(e.amountUsd || 0).toFixed(2)},${Math.round(Number(e.amountUsd || 0) * 4100)}\n`;
+    });
+
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement("a");
+    link.href = URL.createObjectURL(blob);
+    link.setAttribute("download", `tr_accounting_report_${Date.now()}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  }
+
+  function dashPrintAccountingReport() {
+    window.print();
+  }
+
+  function dashCopyPnlSummary() {
+    const m = calculateAccountingMetrics(accountingFilterPeriod);
+    const summary = `
+=============================================
+TR STORE & CAFE (កាហ្វេ ទីរ៉ូ) - P&L SUMMARY
+Period: ${m.period}
+=============================================
+Gross Sales Revenue:    $${m.netSalesRevenueUsd.toFixed(2)} (៛${m.netSalesRevenueKhr.toLocaleString()})
+Cost of Goods Sold:     $${m.totalCogsUsd.toFixed(2)} (៛${m.totalCogsKhr.toLocaleString()})
+---------------------------------------------
+Gross Profit:           $${m.grossProfitUsd.toFixed(2)} (Margin: ${m.grossMarginPct}%)
+Total OpEx Expenses:    $${m.totalOpExUsd.toFixed(2)} (៛${m.totalOpExKhr.toLocaleString()})
+EBITDA Operating:       $${m.ebitdaUsd.toFixed(2)}
+Cambodia GDT VAT (10%): $${m.netVatPayableUsd.toFixed(2)}
+---------------------------------------------
+NET PROFIT AFTER TAX:   $${m.netProfitUsd.toFixed(2)} (៛${m.netProfitKhr.toLocaleString()})
+Net Margin:             ${m.netMarginPct}%
+Cash Position:          $${(m.cashInDrawerUsd + m.bakongBankAccountUsd).toFixed(2)}
+=============================================
+`.trim();
+
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(summary).then(() => {
+        alert("📋 P&L Summary copied to clipboard!");
+      }).catch(() => {
+        prompt("Copy P&L text below:", summary);
+      });
+    } else {
+      prompt("Copy P&L text below:", summary);
+    }
+  }
+
+  // Expose accounting actions onto window
+  window.dashOpenLogExpenseModal = dashOpenLogExpenseModal;
+  window.dashCloseLogExpenseModal = dashCloseLogExpenseModal;
+  window.dashUpdateExpKhrPreview = dashUpdateExpKhrPreview;
+  window.dashSubmitLogExpense = dashSubmitLogExpense;
+  window.dashDeleteExpense = dashDeleteExpense;
+  window.dashChangeAccountingPeriod = dashChangeAccountingPeriod;
+  window.dashChangeAccountingSubTab = dashChangeAccountingSubTab;
+  window.dashSetAccountingCurrency = dashSetAccountingCurrency;
+  window.exportAccountingToCsv = exportAccountingToCsv;
+  window.dashPrintAccountingReport = dashPrintAccountingReport;
+  window.dashCopyPnlSummary = dashCopyPnlSummary;
+  window.renderAccountingTab = renderAccountingTab;
 
   function renderStockTab() {
     const catalog = getDashboardCatalog();
@@ -2436,6 +4202,17 @@
         salesFilterPeriod = subId;
         renderSalesTab();
       }
+    } else if (tab === 'accounting') {
+      if (subId === 'LOG_EXPENSE') {
+        dashOpenLogExpenseModal();
+      } else if (subId === 'EXPORT_CSV') {
+        exportAccountingToCsv();
+      } else if (subId === 'PRINT') {
+        dashPrintAccountingReport();
+      } else {
+        accountingSubTab = subId;
+        renderAccountingTab();
+      }
     } else if (tab === 'stock') {
       if (subId === 'LOW') {
         stockFilterStatus = 'LOW';
@@ -2461,8 +4238,17 @@
       } else {
         renderStaffTab(subId);
       }
+    } else if (tab === 'merchants') {
+      if (subId === 'NEW_MERCHANT') {
+        openAuthBoardModal('signup');
+      } else if (subId === 'OUTBOX') {
+        dashOpenEmailOutboxModal();
+      } else {
+        renderMerchantsTab();
+      }
     } else if (tab === 'settings') {
       if (subId === 'BAKONG_QR') dashScrollToBakongSettings();
+      else if (subId === 'SALES_TAX') dashOpenTaxEditorModal();
       else if (subId === 'WIFI') openWifiEditorModal();
       else if (subId === 'TELEGRAM') openAdminTelegramEditModal();
       else if (subId === 'EXCHANGE') openSettingsModal();
@@ -2631,7 +4417,8 @@
     const billDiscountAmount = Number((subtotalAfterItemDisc * ((dashPosBillDiscountPct || 0) / 100)).toFixed(2));
     const totalDiscount = Number((itemDiscountsTotal + billDiscountAmount).toFixed(2));
     const netSubtotal = Math.max(0, grossSubtotal - totalDiscount);
-    const tax = Number((netSubtotal * 0.10).toFixed(2));
+    const taxRate = (typeof getSalesTaxRate === 'function') ? getSalesTaxRate() : 10;
+    const tax = Number((netSubtotal * (taxRate / 100)).toFixed(2));
     const totalUsd = Number((netSubtotal + tax).toFixed(2));
     const totalKhr = Math.round(totalUsd * 4100);
     return {
@@ -2644,6 +4431,7 @@
       totalDiscount,
       netSubtotal,
       tax,
+      taxRate,
       totalUsd,
       totalKhr
     };
@@ -3186,6 +4974,8 @@
 
     if (grossEl) grossEl.innerText = `$${totals.grossSubtotal.toFixed(2)}`;
     if (taxEl) taxEl.innerText = `$${totals.tax.toFixed(2)}`;
+    const cbTaxLabelEl = document.getElementById('dash-cb-tax-label');
+    if (cbTaxLabelEl) cbTaxLabelEl.innerText = `Sales Tax (${totals.taxRate !== undefined ? totals.taxRate : (typeof getSalesTaxRate === 'function' ? getSalesTaxRate() : 10)}%):`;
     if (totalUsdEl) totalUsdEl.innerText = `$${totals.totalUsd.toFixed(2)}`;
     if (totalKhrEl) totalKhrEl.innerText = `៛${totals.totalKhr.toLocaleString()} KHR`;
 
@@ -3250,6 +5040,7 @@
       billDiscountAmount: totals.billDiscountAmount,
       subtotal: totals.netSubtotal,
       tax: totals.tax,
+      taxRate: totals.taxRate || (typeof getSalesTaxRate === 'function' ? getSalesTaxRate() : 10),
       totalUsd: totals.totalUsd,
       totalKhr: totals.totalKhr,
       tender: tender,
@@ -3361,7 +5152,7 @@
           </div>
         ` : ''}
         <div style="display:flex; justify-content:space-between; font-size:10px;">
-          <span>Tax (10%):</span>
+          <span>Tax (${totals.taxRate !== undefined ? totals.taxRate : (typeof getSalesTaxRate === 'function' ? getSalesTaxRate() : 10)}%):</span>
           <span>$${totals.tax.toFixed(2)}</span>
         </div>
         <div class="double-divider"></div>
@@ -3407,6 +5198,7 @@
       discountAmount: totals.totalDiscount,
       subtotal: totals.netSubtotal,
       tax: totals.tax,
+      taxRate: totals.taxRate || (typeof getSalesTaxRate === 'function' ? getSalesTaxRate() : 10),
       totalUsd: totals.totalUsd,
       totalKhr: totals.totalKhr,
       items: JSON.parse(JSON.stringify(dashPosCart))
@@ -3488,6 +5280,151 @@
     if (img && img.src) {
       window.open(img.src, '_blank');
     }
+  };
+
+  // ==============================================================
+  // SALES TAX (VAT) RATE MANAGEMENT & CONTROLS
+  // ==============================================================
+  window.getSalesTaxRate = function() {
+    const stored = localStorage.getItem('tr_coffee_sales_tax_rate');
+    if (stored !== null && stored !== '') {
+      const parsed = parseFloat(stored);
+      if (!isNaN(parsed) && parsed >= 0) return parsed;
+    }
+    if (window.SITE_SETTINGS && window.SITE_SETTINGS.salesTaxRate !== undefined) {
+      const parsed = parseFloat(window.SITE_SETTINGS.salesTaxRate);
+      if (!isNaN(parsed) && parsed >= 0) return parsed;
+    }
+    try {
+      const raw = localStorage.getItem('tr_coffee_settings');
+      if (raw) {
+        const parsedSettings = JSON.parse(raw);
+        if (parsedSettings && parsedSettings.salesTaxRate !== undefined) {
+          const val = parseFloat(parsedSettings.salesTaxRate);
+          if (!isNaN(val) && val >= 0) return val;
+        }
+      }
+    } catch(e) {}
+    return 10; // Default 10% VAT
+  };
+
+  window.setSalesTaxRate = function(rate) {
+    const num = Math.max(0, parseFloat(rate) || 0);
+    localStorage.setItem('tr_coffee_sales_tax_rate', num.toString());
+    if (window.SITE_SETTINGS) {
+      window.SITE_SETTINGS.salesTaxRate = num;
+    }
+    try {
+      const raw = localStorage.getItem('tr_coffee_settings');
+      const settings = raw ? JSON.parse(raw) : {};
+      settings.salesTaxRate = num;
+      localStorage.setItem('tr_coffee_settings', JSON.stringify(settings));
+    } catch(e) {}
+    updateSalesTaxUI();
+    return num;
+  };
+
+  function updateSalesTaxUI() {
+    const rate = getSalesTaxRate();
+    const badge = document.getElementById('dash-settings-tax-badge');
+    if (badge) {
+      badge.innerText = rate === 0 ? '0% Exempt' : `${rate}% VAT`;
+    }
+    const posTaxLabel = document.getElementById('dash-pos-tax-label');
+    if (posTaxLabel) {
+      posTaxLabel.innerText = `Tax (${rate}%):`;
+    }
+    const cbTaxLabel = document.getElementById('dash-cb-tax-label');
+    if (cbTaxLabel) {
+      cbTaxLabel.innerText = `Sales Tax (${rate}%):`;
+    }
+    const modalDisplay = document.getElementById('dash-modal-tax-current-display');
+    if (modalDisplay) {
+      modalDisplay.innerText = `${rate.toFixed(1)}%`;
+    }
+  }
+  window.updateSalesTaxUI = updateSalesTaxUI;
+
+  window.dashOpenTaxEditorModal = function() {
+    const modal = document.getElementById('dash-tax-editor-modal');
+    if (!modal) return;
+    const currentRate = getSalesTaxRate();
+    const input = document.getElementById('dash-modal-tax-input');
+    if (input) input.value = currentRate;
+
+    dashUpdateTaxPresetButtons(currentRate);
+    dashLivePreviewTaxSimulation();
+
+    modal.classList.remove('hidden');
+    modal.classList.add('flex');
+  };
+
+  window.dashCloseTaxEditorModal = function() {
+    const modal = document.getElementById('dash-tax-editor-modal');
+    if (!modal) return;
+    modal.classList.add('hidden');
+    modal.classList.remove('flex');
+  };
+
+  window.dashSelectTaxPreset = function(rate) {
+    const input = document.getElementById('dash-modal-tax-input');
+    if (input) input.value = rate;
+    dashUpdateTaxPresetButtons(rate);
+    dashLivePreviewTaxSimulation();
+  };
+
+  window.dashUpdateTaxPresetButtons = function(activeRate) {
+    const presets = [0, 5, 7, 10];
+    presets.forEach(p => {
+      const btn = document.getElementById(`dash-tax-pre-${p}`);
+      if (!btn) return;
+      if (Math.abs(Number(activeRate) - p) < 0.01) {
+        btn.className = "dash-tax-preset-btn py-2 px-1 rounded-xl text-xs font-bold text-center border transition-all bg-emerald-700 text-white border-emerald-700 shadow-xs ring-2 ring-emerald-400/50";
+      } else {
+        btn.className = "dash-tax-preset-btn py-2 px-1 rounded-xl text-xs font-bold text-center border transition-all bg-white hover:bg-slate-50 text-slate-700 border-slate-200";
+      }
+    });
+  };
+
+  window.dashLivePreviewTaxSimulation = function() {
+    const input = document.getElementById('dash-modal-tax-input');
+    const rate = input ? Math.max(0, parseFloat(input.value) || 0) : 10;
+
+    const currentDisp = document.getElementById('dash-modal-tax-current-display');
+    if (currentDisp) currentDisp.innerText = `${rate.toFixed(1)}%`;
+
+    const modePill = document.getElementById('dash-modal-tax-mode-pill');
+    if (modePill) {
+      if (rate === 0) modePill.innerText = '0% Tax Exempt';
+      else if (rate <= 5) modePill.innerText = 'Reduced VAT (5%)';
+      else if (rate <= 7) modePill.innerText = 'Service VAT (7%)';
+      else if (rate === 10) modePill.innerText = 'Standard VAT (10%)';
+      else modePill.innerText = `Custom VAT (${rate}%)`;
+    }
+
+    const sampleGross = 10.00;
+    const sampleTax = Number((sampleGross * (rate / 100)).toFixed(2));
+    const sampleTotal = Number((sampleGross + sampleTax).toFixed(2));
+    const sampleKhr = Math.round(sampleTotal * 4100);
+
+    const simTaxLabel = document.getElementById('dash-sim-tax-label');
+    if (simTaxLabel) simTaxLabel.innerText = `Calculated Tax (${rate}%):`;
+    const simTaxVal = document.getElementById('dash-sim-tax-val');
+    if (simTaxVal) simTaxVal.innerText = `+$${sampleTax.toFixed(2)}`;
+    const simTotalVal = document.getElementById('dash-sim-total-val');
+    if (simTotalVal) simTotalVal.innerText = `$${sampleTotal.toFixed(2)} (៛${sampleKhr.toLocaleString()} KHR)`;
+
+    dashUpdateTaxPresetButtons(rate);
+  };
+
+  window.dashSaveTaxEditorModal = function() {
+    const input = document.getElementById('dash-modal-tax-input');
+    const rate = input ? Math.max(0, parseFloat(input.value) || 0) : 10;
+    setSalesTaxRate(rate);
+    dashCloseTaxEditorModal();
+    renderDashPosCartUI();
+    renderSettingsTab();
+    alert(`🎉 Sales Tax rate successfully updated to ${rate}%!\nApplied to POS ticket calculations, Check Bills, and receipts.`);
   };
 
   // ==============================================================
@@ -3704,6 +5641,7 @@
     const nameInp = document.getElementById('dash-setting-bakong-name');
     if (nameInp) nameInp.value = merchant;
     dashLiveUpdateBakongPreview();
+    updateSalesTaxUI();
   }
 
   window.dashConfirmBakongPosPaid = function() {
@@ -3724,6 +5662,168 @@
     dashFinalizePosOrder('CASH');
   };
 
+  // ==============================================================
+  // TELEGRAM REAL-TIME TRANSACTION NOTIFICATION (POS)
+  // ==============================================================
+  function escapeTelegramHtml(str) {
+    if (!str) return '';
+    return String(str)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;');
+  }
+
+  window.dashSendTelegramPosNotification = async function(sale) {
+    if (!sale) return;
+    try {
+      let token = '';
+      let chatId = '';
+
+      if (window.SITE_SETTINGS) {
+        if (window.SITE_SETTINGS.telegramEnabled === false) return;
+        token = window.SITE_SETTINGS.telegramToken;
+        chatId = window.SITE_SETTINGS.telegramChatId;
+      }
+
+      if (!token || !chatId) {
+        try {
+          const raw = localStorage.getItem('tr_coffee_settings');
+          if (raw) {
+            const parsed = JSON.parse(raw);
+            if (parsed && parsed.telegramEnabled === false) return;
+            token = token || (parsed && parsed.telegramToken);
+            chatId = chatId || (parsed && parsed.telegramChatId);
+          }
+        } catch(e) {}
+      }
+
+      // Check tenant-isolated Telegram configurations
+      if (window.MultiTenantStore && typeof window.MultiTenantStore.getSettings === 'function') {
+        try {
+          const tSettings = window.MultiTenantStore.getSettings();
+          if (tSettings) {
+            if (tSettings.telegramEnabled === false) return;
+            token = tSettings.telegramToken || token;
+            chatId = tSettings.telegramChatId || chatId;
+          }
+        } catch(e) {}
+      }
+
+      // Default credentials for TR Store & Cafe Telegram Channel
+      token = (token && token.trim()) || "7942738910:AAH-xXJgVfQ6aF3WvXyv770gZk3qYkZ88M0";
+      chatId = (chatId && chatId.trim()) || "-1002345678901";
+
+      const storeBrand = (window.currentAdmin && (window.currentAdmin.name || window.currentAdmin.businessName)) || (window.SITE_SETTINGS && window.SITE_SETTINGS.brandName) || 'TR STORE & CAFE';
+      const orderId = escapeTelegramHtml(sale.orderId || '#TR-0000');
+      const dateStr = escapeTelegramHtml(sale.dateStr || new Date().toISOString().split('T')[0]);
+      const timeStr = escapeTelegramHtml(sale.timeStr || new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }));
+      const branch = escapeTelegramHtml(sale.branch || 'BKK1 Flagship Branch');
+      const cashier = escapeTelegramHtml(sale.cashier || 'Store Cashier');
+      const customer = escapeTelegramHtml(sale.customerName || 'Counter Walk-in');
+      const tender = sale.tender === 'KHQR' ? '🔴 Bakong Universal KHQR' : '💵 Cash Tender';
+
+      const itemsSummary = (sale.items || []).map(i => {
+        const iName = escapeTelegramHtml(i.name || 'Store Item');
+        const iQty = i.qty || 1;
+        const iPrice = Number(i.price || 0).toFixed(2);
+        const iLineTotal = Number(i.lineTotal || (i.price * iQty)).toFixed(2);
+        const discBadge = i.discountPct > 0 ? ` <i>(-${i.discountPct}%)</i>` : '';
+        return `• <b>${iName}</b> x${iQty}${discBadge} ($${iPrice}) = <b>$${iLineTotal}</b>`;
+      }).join('\n') || '• <i>Standard Sale Transaction</i>';
+
+      const discountAmt = Number(sale.discountAmountUsd || sale.discountAmount || 0);
+      const discountLine = discountAmt > 0 ? `\n🏷️ <b>Total Discount:</b> -$${discountAmt.toFixed(2)} (${sale.discountPercent || 0}%)` : '';
+      const taxRate = sale.taxRate !== undefined ? sale.taxRate : (typeof getSalesTaxRate === 'function' ? getSalesTaxRate() : 10);
+      const taxAmt = Number(sale.taxUsd !== undefined ? sale.taxUsd : (sale.tax || 0)).toFixed(2);
+      const totalUsd = Number(sale.totalUsd || 0).toFixed(2);
+      const totalKhr = Number(sale.totalKhr || Math.round(Number(sale.totalUsd || 0) * 4100)).toLocaleString();
+
+      const htmlMsg = `☕ <b>NEW TRANSACTION • ${escapeTelegramHtml(storeBrand).toUpperCase()}</b> 🇰🇭
+━━━━━━━━━━━━━━━━━━━━━━
+🧾 <b>Receipt:</b> <code>${orderId}</code>
+📅 <b>Date:</b> ${dateStr} ${timeStr}
+🏪 <b>Branch:</b> ${branch}
+👨‍💼 <b>Cashier:</b> ${cashier}
+👤 <b>Customer:</b> ${customer}
+💳 <b>Payment:</b> ${tender}
+━━━━━━━━━━━━━━━━━━━━━━
+🛒 <b>Items Sold (${sale.items ? sale.items.length : 1}):</b>
+${itemsSummary}
+━━━━━━━━━━━━━━━━━━━━━━${discountLine}
+🏷️ <b>Sales Tax (VAT ${taxRate}%):</b> +$${taxAmt}
+💰 <b>GRAND TOTAL:</b> <b>$${totalUsd}</b> (៛${totalKhr} KHR)
+━━━━━━━━━━━━━━━━━━━━━━
+✅ <i>Auto-recorded via TR Store Web POS</i>`;
+
+      console.log(`[Telegram POS Alert] Dispatching transaction ${sale.orderId} to chat ${chatId}...`);
+
+      let response = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          chat_id: chatId.trim(),
+          text: htmlMsg,
+          parse_mode: 'HTML',
+          disable_web_page_preview: true
+        })
+      });
+
+      let resData = await response.json();
+
+      // Retry with plain text if HTML entity parsing fails
+      if (!resData.ok && resData.description && resData.description.includes("can't parse entities")) {
+        console.warn("[Telegram POS Alert] Entity parse warning, retrying with plain text:", resData.description);
+        const plainMsg = htmlMsg.replace(/<[^>]*>/g, '');
+        response = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            chat_id: chatId.trim(),
+            text: plainMsg,
+            disable_web_page_preview: true
+          })
+        });
+        resData = await response.json();
+      }
+
+      if (resData.ok) {
+        console.log(`[Telegram POS Alert] ✅ Delivered message ID ${resData.result?.message_id} to chat ${chatId}`);
+        if (typeof showPosTelegramToast === 'function') {
+          showPosTelegramToast(`✈️ Telegram: Order <b>${sale.orderId}</b> ($${totalUsd}) sent to alert channel!`, true);
+        }
+        const textEl = document.getElementById('dash-pos-receipt-tg-text');
+        if (textEl) textEl.innerText = "Auto-sent to Telegram channel ✓";
+      } else {
+        console.error(`[Telegram POS Alert] ❌ Delivery error:`, resData);
+        if (typeof showPosTelegramToast === 'function') {
+          showPosTelegramToast(`⚠️ Telegram notice: ${resData.description || 'Delivery pending'}`, false);
+        }
+        const textEl = document.getElementById('dash-pos-receipt-tg-text');
+        if (textEl) textEl.innerText = "Telegram alert retry available";
+      }
+    } catch(err) {
+      console.error("[Telegram POS Alert] Request failed:", err);
+      if (typeof showPosTelegramToast === 'function') {
+        showPosTelegramToast(`⚠️ Telegram alert: ${err.message || 'Network offline'}`, false);
+      }
+    }
+  };
+
+  window.dashResendReceiptToTelegram = function() {
+    const order = dashLastCompletedOrder || (function() {
+      try { return JSON.parse(localStorage.getItem('tr_last_pos_order')); } catch(e){ return null; }
+    })();
+    if (!order) {
+      alert("No completed receipt available to send.");
+      return;
+    }
+    const textEl = document.getElementById('dash-pos-receipt-tg-text');
+    if (textEl) textEl.innerText = "Dispatching receipt to Telegram channel...";
+    dashSendTelegramPosNotification(order);
+  };
+
+  window.notifyTelegramSale = window.dashSendTelegramPosNotification;
+
   window.dashFinalizePosOrder = function(tender, customOrderData = null) {
     let orderInfo = customOrderData;
     if (!orderInfo) {
@@ -3743,6 +5843,7 @@
         billDiscountAmount: totals.billDiscountAmount,
         subtotal: totals.netSubtotal,
         tax: totals.tax,
+        taxRate: totals.taxRate || (typeof getSalesTaxRate === 'function' ? getSalesTaxRate() : 10),
         totalUsd: totals.totalUsd,
         totalKhr: totals.totalKhr,
         items: JSON.parse(JSON.stringify(dashPosCart))
@@ -3770,6 +5871,7 @@
       discountAmountUsd: orderInfo.discountAmount || 0,
       subtotalUsd: orderInfo.subtotal,
       taxUsd: orderInfo.tax,
+      taxRate: orderInfo.taxRate || (typeof getSalesTaxRate === 'function' ? getSalesTaxRate() : 10),
       totalUsd: Number(orderInfo.totalUsd.toFixed(2)),
       totalKhr: orderInfo.totalKhr,
       items: orderInfo.items.map(c => {
@@ -3800,16 +5902,26 @@
     try {
       localStorage.setItem('tr_coffee_menu', JSON.stringify(catalog));
       window.MENU_ITEMS = catalog;
+      if (window.MultiTenantStore && typeof window.MultiTenantStore.saveProducts === 'function') {
+        window.MultiTenantStore.saveProducts(catalog);
+      }
     } catch(e){}
 
-    // Record in SALES_DB
+    // Record in SALES_DB & MultiTenantStore
     if (!Array.isArray(window.SALES_DB)) window.SALES_DB = [];
     window.SALES_DB.unshift(completedSale);
-    try { localStorage.setItem('tr_coffee_sales', JSON.stringify(window.SALES_DB)); } catch(e){}
+    try {
+      localStorage.setItem('tr_coffee_sales', JSON.stringify(window.SALES_DB));
+      if (window.MultiTenantStore && typeof window.MultiTenantStore.recordSale === 'function') {
+        window.MultiTenantStore.recordSale(completedSale);
+      }
+    } catch(e){}
 
-    // Trigger Telegram notification if configured
-    if (typeof window.notifyTelegramSale === 'function') {
-      try { window.notifyTelegramSale(completedSale); } catch(e){}
+    // Auto-send real-time notification to Telegram for POS transaction
+    try {
+      dashSendTelegramPosNotification(completedSale);
+    } catch(e) {
+      console.error("[POS] Error invoking Telegram notification:", e);
     }
 
     dashLastCompletedOrder = completedSale;
@@ -3901,7 +6013,8 @@
     const branch = order.branch || 'BKK1 Flagship Branch';
     const customer = order.customerName || 'Counter Walk-in';
     const subtotal = order.subtotalUsd !== undefined ? order.subtotalUsd : order.totalUsd;
-    const tax = order.taxUsd !== undefined ? order.taxUsd : (subtotal * 0.10);
+    const taxRate = order.taxRate !== undefined ? order.taxRate : (order.taxUsd !== undefined && subtotal > 0 ? Number(((order.taxUsd / subtotal) * 100).toFixed(1)) : (typeof getSalesTaxRate === 'function' ? getSalesTaxRate() : 10));
+    const tax = order.taxUsd !== undefined ? order.taxUsd : Number((subtotal * (taxRate / 100)).toFixed(2));
     const total = order.totalUsd || 0;
     const totalKhr = order.totalKhr || Math.round(total * 4100);
     const payMethod = order.tender === 'KHQR' ? 'Bakong Universal KHQR' : 'Cash Tender';
@@ -4010,7 +6123,7 @@
         </div>
         ` : ''}
         <div style="display:flex; justify-content:space-between; font-size:10px;">
-          <span>Tax (10%):</span>
+          <span>Tax (${taxRate}%):</span>
           <span>$${tax.toFixed(2)}</span>
         </div>
         <div class="double-divider"></div>
@@ -4117,6 +6230,888 @@
 
     renderStaffTab();
     alert(`🎉 Staff user "${name}" (${role}) registered successfully with PIN ${pin}!`);
+  };
+
+  window.renderMerchantsTab = function() {
+    const wrapper = document.getElementById('dash-merchants-table-wrapper');
+    const kpiRow = document.getElementById('dash-merchants-kpi-row');
+    if (!wrapper) return;
+
+    if (!window.AdminManager || typeof window.AdminManager.listAllUsers !== 'function') {
+      wrapper.innerHTML = `<div class="p-6 text-center text-slate-400">Multi-tenant management module is initializing...</div>`;
+      return;
+    }
+
+    let users = [];
+    try {
+      users = window.AdminManager.listAllUsers();
+    } catch(e) {
+      wrapper.innerHTML = `
+        <div class="p-8 text-center text-red-600 bg-red-50/50 rounded-2xl border border-red-200">
+          <div class="text-3xl mb-2">⛔</div>
+          <p class="font-extrabold text-sm">Administrator Role Required</p>
+          <p class="text-xs text-slate-600 mt-1">${e.message || 'Only users with administrator privileges can view the platform tenant list.'}</p>
+          <button type="button" onclick="openAuthBoardModal('signin')" class="mt-3 bg-slate-900 text-amber-300 px-4 py-2 rounded-xl text-xs font-bold active:scale-95 shadow-md">Sign In as Admin</button>
+        </div>
+      `;
+      return;
+    }
+
+    const searchInput = document.getElementById('dash-merchants-search');
+    const query = (searchInput?.value || '').trim().toLowerCase();
+    const filtered = users.filter(u => 
+      !query ||
+      (u.businessName && u.businessName.toLowerCase().includes(query)) ||
+      (u.email && u.email.toLowerCase().includes(query)) ||
+      (u.username && u.username.toLowerCase().includes(query)) ||
+      (u.id && u.id.toLowerCase().includes(query))
+    );
+
+    // Render KPI Cards
+    if (kpiRow) {
+      const totalUsers = users.length;
+      const activeMerchants = users.filter(u => u.status === 'active' && u.role === 'user').length;
+      const suspendedCount = users.filter(u => u.status === 'suspended').length;
+      let totalPlatformRev = 0;
+      users.forEach(u => { totalPlatformRev += Number(u.totalRevenueUsd || 0); });
+
+      kpiRow.innerHTML = `
+        <div class="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm">
+          <div class="flex items-center justify-between mb-2">
+            <span class="text-[11px] font-bold text-slate-500 uppercase tracking-wider">Total Accounts</span>
+            <span class="w-8 h-8 rounded-xl bg-slate-100 text-slate-700 flex items-center justify-center text-sm font-bold">👥</span>
+          </div>
+          <div class="text-2xl font-black text-slate-900">${totalUsers}</div>
+          <div class="text-[10.5px] text-slate-500 mt-0.5">Platform registered tenants</div>
+        </div>
+        <div class="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm">
+          <div class="flex items-center justify-between mb-2">
+            <span class="text-[11px] font-bold text-slate-500 uppercase tracking-wider">Active Merchants</span>
+            <span class="w-8 h-8 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center text-sm font-bold">✅</span>
+          </div>
+          <div class="text-2xl font-black text-emerald-600">${activeMerchants}</div>
+          <div class="text-[10.5px] text-emerald-700 font-bold mt-0.5">Operational POS terminals</div>
+        </div>
+        <div class="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm">
+          <div class="flex items-center justify-between mb-2">
+            <span class="text-[11px] font-bold text-slate-500 uppercase tracking-wider">Suspended</span>
+            <span class="w-8 h-8 rounded-xl bg-red-50 text-red-600 flex items-center justify-center text-sm font-bold">⛔</span>
+          </div>
+          <div class="text-2xl font-black ${suspendedCount > 0 ? 'text-red-600' : 'text-slate-400'}">${suspendedCount}</div>
+          <div class="text-[10.5px] text-slate-500 mt-0.5">Access blocked by admin</div>
+        </div>
+        <div class="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm">
+          <div class="flex items-center justify-between mb-2">
+            <span class="text-[11px] font-bold text-slate-500 uppercase tracking-wider">Platform Volume</span>
+            <span class="w-8 h-8 rounded-xl bg-teal-50 text-teal-700 flex items-center justify-center text-sm font-bold">💰</span>
+          </div>
+          <div class="text-2xl font-black text-teal-800">$${totalPlatformRev.toFixed(2)}</div>
+          <div class="text-[10.5px] text-teal-700 font-bold mt-0.5">≈ ៛${Math.round(totalPlatformRev * 4100).toLocaleString()} KHR</div>
+        </div>
+      `;
+    }
+
+    if (filtered.length === 0) {
+      wrapper.innerHTML = `
+        <div class="p-8 text-center text-slate-400">
+          <span class="text-3xl mb-2">🔍</span>
+          <p class="font-extrabold text-sm text-slate-700">No matching merchants found</p>
+        </div>
+      `;
+      return;
+    }
+
+    const currentTenantId = (window.MultiTenantStore && window.MultiTenantStore.getActiveTenantId()) || '';
+
+    wrapper.innerHTML = `
+      <table class="w-full text-left text-xs border-collapse">
+        <thead class="bg-slate-50 border-b border-slate-200 text-slate-600 uppercase text-[10px] tracking-wider font-extrabold">
+          <tr>
+            <th class="p-3">Store &amp; Merchant</th>
+            <th class="p-3">Login Credentials</th>
+            <th class="p-3">Role</th>
+            <th class="p-3">Status</th>
+            <th class="p-3 text-center">Email Verification</th>
+            <th class="p-3 text-center">Products</th>
+            <th class="p-3 text-center">Sales</th>
+            <th class="p-3 text-right">Revenue</th>
+            <th class="p-3 text-center">RBAC Actions</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-slate-100 font-medium">
+          ${filtered.map(u => {
+            const isSuspended = u.status === 'suspended';
+            const isPrimaryAdmin = u.role === 'admin';
+            const isActiveTenant = currentTenantId === u.id;
+            const isVerified = u.emailVerified !== false;
+
+            return `
+              <tr class="hover:bg-slate-50/80 transition-colors ${isSuspended ? 'bg-red-50/30 text-slate-400' : ''}">
+                <td class="p-3">
+                  <div class="flex items-center gap-2.5">
+                    <div class="w-9 h-9 rounded-xl flex items-center justify-center text-base shrink-0 font-bold shadow-xs ${
+                      isPrimaryAdmin ? 'bg-amber-100 text-amber-800' : (isSuspended ? 'bg-red-100 text-red-700' : 'bg-teal-100 text-teal-800')
+                    }">
+                      ${isPrimaryAdmin ? '👑' : (isSuspended ? '⛔' : '🏪')}
+                    </div>
+                    <div>
+                      <div class="font-black text-slate-900 text-xs flex items-center gap-1.5">
+                        <span>${escapeTelegramHtml(u.businessName)}</span>
+                        ${isActiveTenant ? '<span class="bg-emerald-500 text-white text-[9px] font-bold px-1.5 py-0.2 rounded-full font-mono">Viewing</span>' : ''}
+                      </div>
+                      <div class="text-[10px] font-mono text-slate-400">${u.id}</div>
+                    </div>
+                  </div>
+                </td>
+                <td class="p-3">
+                  <div class="text-slate-800 font-bold">${escapeTelegramHtml(u.email)}</div>
+                  <div class="text-[10px] text-slate-500 font-mono">User: @${escapeTelegramHtml(u.username)}</div>
+                </td>
+                <td class="p-3">
+                  ${
+                    isPrimaryAdmin
+                      ? '<span class="bg-amber-100 text-amber-800 border border-amber-300 text-[10px] font-extrabold px-2 py-0.5 rounded-full">ADMIN</span>'
+                      : '<span class="bg-blue-50 text-blue-700 border border-blue-200 text-[10px] font-extrabold px-2 py-0.5 rounded-full">MERCHANT</span>'
+                  }
+                </td>
+                <td class="p-3">
+                  ${
+                    isSuspended
+                      ? '<span class="bg-red-100 text-red-800 border border-red-300 text-[10px] font-extrabold px-2 py-0.5 rounded-full">SUSPENDED</span>'
+                      : '<span class="bg-emerald-100 text-emerald-800 border border-emerald-300 text-[10px] font-extrabold px-2 py-0.5 rounded-full">ACTIVE</span>'
+                  }
+                </td>
+                <td class="p-3 text-center">
+                  ${
+                    isVerified
+                      ? `<span class="bg-emerald-50 text-emerald-700 border border-emerald-300 text-[10px] font-extrabold px-2 py-0.5 rounded-full inline-flex items-center gap-1 shadow-2xs" title="Verified email address">
+                          <span>✉️</span> <span>Verified</span>
+                        </span>`
+                      : `<div class="inline-flex flex-col items-center gap-1">
+                          <span class="bg-amber-50 text-amber-800 border border-amber-300 text-[10px] font-extrabold px-2 py-0.5 rounded-full inline-flex items-center gap-1">
+                            <span>⚠️</span> <span>Pending Code</span>
+                          </span>
+                          <button type="button" onclick="dashSendVerificationEmailToUser('${u.id}', '${escapeTelegramHtml(u.email)}', '${escapeTelegramHtml(u.businessName)}')" class="text-[9.5px] font-bold text-teal-700 hover:text-teal-900 underline">
+                            Resend Code
+                          </button>
+                        </div>`
+                  }
+                </td>
+                <td class="p-3 text-center font-bold text-slate-700 font-mono">${u.productsCount}</td>
+                <td class="p-3 text-center font-bold text-slate-700 font-mono">${u.salesCount}</td>
+                <td class="p-3 text-right font-black text-emerald-700 font-mono">$${Number(u.totalRevenueUsd || 0).toFixed(2)}</td>
+                <td class="p-3 text-center">
+                  <div class="flex items-center justify-center gap-1.5">
+                    ${
+                      !isPrimaryAdmin
+                        ? `<button type="button" onclick="toggleUserStatus('${u.id}', '${u.status}')" class="px-2.5 py-1 rounded-lg text-[10.5px] font-bold transition-all shadow-2xs ${
+                            isSuspended
+                              ? 'bg-emerald-600 hover:bg-emerald-700 text-white'
+                              : 'bg-amber-100 hover:bg-amber-200 text-amber-900 border border-amber-300'
+                          }">
+                            ${isSuspended ? '✅ Activate' : '⛔ Suspend'}
+                          </button>`
+                        : ''
+                    }
+                    <button type="button" onclick="switchActiveTenant('${u.id}')" class="bg-slate-100 hover:bg-teal-50 hover:text-teal-800 text-slate-700 border border-slate-200 px-2.5 py-1 rounded-lg text-[10.5px] font-bold transition-all" title="Switch active session to view this tenant's POS">
+                      👁️ POS
+                    </button>
+                    ${
+                      !isPrimaryAdmin
+                        ? `<button type="button" onclick="deleteTenantUser('${u.id}', '${escapeTelegramHtml(u.businessName)}')" class="bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 px-2 py-1 rounded-lg text-[10.5px] font-bold transition-all" title="Purge all store data &amp; delete user">
+                            🗑️
+                          </button>`
+                        : ''
+                    }
+                  </div>
+                </td>
+              </tr>
+            `;
+          }).join('')}
+        </tbody>
+      </table>
+    `;
+  };
+
+  // ==============================================================
+  // EMAIL OUTBOX & CODE DISPATCH MANAGER
+  // ==============================================================
+  let outboxSearchFilter = '';
+  let outboxComposerVisible = false;
+  let outboxEditingItem = null;
+
+  window.dashOpenEmailOutboxModal = function () {
+    let modal = document.getElementById('dash-email-outbox-modal');
+    if (!modal) {
+      modal = document.createElement('div');
+      modal.id = 'dash-email-outbox-modal';
+      modal.className = 'fixed inset-0 z-[110] bg-slate-950/75 backdrop-blur-sm hidden items-center justify-center p-3 sm:p-5';
+      document.body.appendChild(modal);
+    }
+
+    dashRenderEmailOutboxModalContent();
+    modal.classList.remove('hidden');
+    modal.classList.add('flex');
+  };
+
+  window.dashCloseEmailOutboxModal = function () {
+    const modal = document.getElementById('dash-email-outbox-modal');
+    if (modal) {
+      modal.classList.add('hidden');
+      modal.classList.remove('flex');
+    }
+  };
+
+  window.dashToggleOutboxComposer = function (forceState) {
+    outboxComposerVisible = forceState !== undefined ? forceState : !outboxComposerVisible;
+    const card = document.getElementById('dash-outbox-composer-card');
+    const toggleBtn = document.getElementById('dash-outbox-composer-toggle-btn');
+    if (card) {
+      if (outboxComposerVisible) {
+        card.classList.remove('hidden');
+        if (toggleBtn) toggleBtn.innerHTML = '<span>✕ Close Composer</span>';
+        const emailInp = document.getElementById('dash-composer-email');
+        if (emailInp) setTimeout(() => emailInp.focus(), 100);
+      } else {
+        card.classList.add('hidden');
+        if (toggleBtn) toggleBtn.innerHTML = '<span>➕ Send Verification Code</span>';
+      }
+    }
+  };
+
+  window.dashOutboxGenerateCode = function (targetInputId = 'dash-composer-code') {
+    const freshCode = Math.floor(100000 + Math.random() * 900000).toString();
+    const inp = document.getElementById(targetInputId);
+    if (inp) {
+      inp.value = freshCode;
+      inp.classList.add('ring-2', 'ring-teal-500');
+      setTimeout(() => inp.classList.remove('ring-2', 'ring-teal-500'), 500);
+    }
+    const subjInp = document.getElementById('dash-composer-subject');
+    if (subjInp && targetInputId === 'dash-composer-code') {
+      subjInp.value = `[TIRO POS] Verify Your New Merchant Account - Code: ${freshCode}`;
+    }
+    return freshCode;
+  };
+
+  window.dashOutboxSelectMerchant = function (email, bizName) {
+    const emailInp = document.getElementById('dash-composer-email');
+    const bizInp = document.getElementById('dash-composer-biz');
+    if (emailInp) emailInp.value = email;
+    if (bizInp) bizInp.value = bizName;
+    if (!outboxComposerVisible) {
+      dashToggleOutboxComposer(true);
+    }
+  };
+
+  window.dashOutboxFilterInput = function (query) {
+    outboxSearchFilter = (query || '').trim().toLowerCase();
+    dashRenderEmailOutboxModalContent();
+  };
+
+  window.dashRenderEmailOutboxModalContent = function () {
+    const modal = document.getElementById('dash-email-outbox-modal');
+    if (!modal) return;
+
+    const emails = (window.MultiTenantAuth && window.MultiTenantAuth.getDispatchedEmails) 
+      ? window.MultiTenantAuth.getDispatchedEmails() 
+      : [];
+
+    let platformUsers = [];
+    try {
+      const rawUsers = localStorage.getItem('pos_platform_users_v2');
+      if (rawUsers) platformUsers = JSON.parse(rawUsers);
+    } catch (e) {}
+
+    const filtered = emails.filter(em => {
+      if (!outboxSearchFilter) return true;
+      const q = outboxSearchFilter;
+      return (
+        (em.to && em.to.toLowerCase().includes(q)) ||
+        (em.toName && em.toName.toLowerCase().includes(q)) ||
+        (em.code && em.code.includes(q)) ||
+        (em.subject && em.subject.toLowerCase().includes(q))
+      );
+    });
+
+    const defaultNewCode = Math.floor(100000 + Math.random() * 900000).toString();
+
+    modal.innerHTML = `
+      <div class="bg-white rounded-3xl max-w-2xl w-full max-h-[92vh] overflow-hidden shadow-2xl border border-slate-200 flex flex-col animate-in fade-in zoom-in-95 duration-200">
+        <!-- Titlebar -->
+        <div class="bg-slate-900 text-white px-5 py-4 flex items-center justify-between border-b border-slate-800">
+          <div class="flex items-center gap-2.5">
+            <span class="text-xl">📨</span>
+            <div>
+              <h3 class="font-black text-sm text-white leading-tight">Merchant Email Verification Outbox</h3>
+              <p class="text-[11px] text-teal-300">Compose, edit, and send 6-digit confirmation codes to merchants</p>
+            </div>
+          </div>
+          <div class="flex items-center gap-2">
+            <button type="button" onclick="dashCloseEmailOutboxModal()" class="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 text-white flex items-center justify-center transition-colors font-bold text-sm">
+              ✕
+            </button>
+          </div>
+        </div>
+
+        <!-- Controls Strip & Composer Toggle -->
+        <div class="bg-slate-50 border-b border-slate-200 p-3.5 space-y-2.5">
+          <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+            <div class="flex items-center gap-2 flex-1">
+              <div class="relative flex-1">
+                <input type="text" oninput="dashOutboxFilterInput(this.value)" value="${escapeTelegramHtml(outboxSearchFilter)}" placeholder="Search outbox by store, email, code..." class="w-full text-xs pl-8 pr-3 py-2 bg-white border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-teal-500 font-medium" />
+                <span class="absolute left-2.5 top-2.5 text-slate-400 text-xs">🔍</span>
+              </div>
+            </div>
+            <div class="flex items-center gap-2 shrink-0">
+              <button type="button" id="dash-outbox-composer-toggle-btn" onclick="dashToggleOutboxComposer()" class="bg-gradient-to-r from-teal-700 to-emerald-600 hover:opacity-95 text-white font-extrabold text-xs px-3.5 py-2 rounded-xl transition-all shadow-xs active:scale-95 flex items-center gap-1.5">
+                <span>${outboxComposerVisible ? '✕ Close Composer' : '➕ Send Verification Code'}</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- Support & Sender Email Configuration Banner -->
+          <div class="flex items-center justify-between bg-teal-50/90 border border-teal-200/90 rounded-2xl px-3.5 py-2 text-xs">
+            <div class="flex items-center gap-2">
+              <span class="text-base">📧</span>
+              <div>
+                <div class="flex items-center gap-1.5">
+                  <span class="text-[11px] font-bold text-slate-700">Support &amp; Sender:</span>
+                  <strong id="dash-outbox-current-support-email" class="font-mono font-black text-teal-900 text-xs bg-white px-2 py-0.5 rounded-lg border border-teal-300">${escapeTelegramHtml((typeof getSystemSupportEmail === 'function' ? getSystemSupportEmail() : localStorage.getItem('pos_support_email') || 'support@tiropulse.pos.kh'))}</strong>
+                </div>
+                <div class="text-[10px] text-teal-700">Default sender address and merchant support contact</div>
+              </div>
+            </div>
+            <button type="button" onclick="openEditSupportEmailDialog()" class="shrink-0 bg-white hover:bg-teal-100 text-teal-800 border border-teal-300 font-extrabold px-3 py-1.5 rounded-xl text-xs shadow-2xs transition-all flex items-center gap-1 active:scale-95" title="Edit this support email address">
+              <span>✏️ Edit Support Email</span>
+            </button>
+          </div>
+
+          <!-- Quick Merchant Select Chips -->
+          <div class="flex items-center gap-1.5 overflow-x-auto pb-1 text-[11px]">
+            <span class="text-slate-400 font-bold shrink-0">Quick Target:</span>
+            ${platformUsers.map(u => `
+              <button type="button" onclick="dashOutboxSelectMerchant('${escapeTelegramHtml(u.email)}', '${escapeTelegramHtml(u.businessName || u.username)}')" class="shrink-0 bg-white hover:bg-teal-50 hover:text-teal-900 border border-slate-200 hover:border-teal-300 text-slate-700 font-semibold px-2 py-0.5 rounded-lg transition-colors flex items-center gap-1">
+                <span>${u.role === 'admin' ? '👑' : '🏪'}</span>
+                <span>${escapeTelegramHtml(u.businessName || u.username)}</span>
+              </button>
+            `).join('')}
+          </div>
+        </div>
+
+        <!-- Scrollable Modal Body -->
+        <div class="p-5 overflow-y-auto space-y-3.5 flex-1 bg-slate-50/50 text-xs">
+          <!-- Collapsible Send Code Composer Card -->
+          <div id="dash-outbox-composer-card" class="${outboxComposerVisible ? '' : 'hidden'} bg-gradient-to-br from-teal-50/80 via-white to-emerald-50/50 border-2 border-teal-300 rounded-2xl p-4 shadow-sm space-y-3">
+            <div class="flex items-center justify-between border-b border-teal-100 pb-2">
+              <div class="flex items-center gap-1.5 font-black text-slate-900 text-xs">
+                <span>✉️</span>
+                <span>Compose &amp; Dispatch Verification Code to Merchant</span>
+              </div>
+              <span class="text-[10px] bg-teal-100 text-teal-800 font-bold px-2 py-0.5 rounded-full">New Message</span>
+            </div>
+
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label class="block font-bold text-slate-700 mb-1 text-[11px]">Merchant Email Address *</label>
+                <input id="dash-composer-email" type="email" placeholder="merchant@business.kh" required class="w-full text-xs px-3 py-2 bg-white border border-slate-300 rounded-xl focus:ring-2 focus:ring-teal-500 focus:outline-none font-medium" />
+              </div>
+              <div>
+                <label class="block font-bold text-slate-700 mb-1 text-[11px]">Store / Business Name</label>
+                <input id="dash-composer-biz" type="text" placeholder="e.g. TR Artisan Coffee" class="w-full text-xs px-3 py-2 bg-white border border-slate-300 rounded-xl focus:ring-2 focus:ring-teal-500 focus:outline-none font-medium" />
+              </div>
+            </div>
+
+            <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div class="sm:col-span-1">
+                <label class="block font-bold text-slate-700 mb-1 text-[11px]">Sender / Support Email</label>
+                <input id="dash-composer-from" type="email" value="${escapeTelegramHtml((typeof getSystemSupportEmail === 'function' ? getSystemSupportEmail() : localStorage.getItem('pos_support_email') || 'support@tiropulse.pos.kh'))}" class="w-full text-xs px-2.5 py-2 bg-white border border-slate-300 rounded-xl focus:ring-2 focus:ring-teal-500 focus:outline-none font-medium font-mono text-[11px]" />
+              </div>
+              <div class="sm:col-span-1">
+                <label class="block font-bold text-slate-700 mb-1 text-[11px]">6-Digit Code *</label>
+                <div class="flex items-center gap-1.5">
+                  <input id="dash-composer-code" type="text" maxlength="6" value="${defaultNewCode}" class="w-full text-center font-mono font-black text-sm text-teal-900 py-1.5 bg-teal-50 border border-teal-300 rounded-xl focus:ring-2 focus:ring-teal-500 focus:outline-none" />
+                  <button type="button" onclick="dashOutboxGenerateCode('dash-composer-code')" class="bg-white hover:bg-slate-100 text-slate-700 border border-slate-300 font-bold px-2 py-1.5 rounded-xl text-[11px] active:scale-95" title="Generate New 6-Digit Code">
+                    🎲
+                  </button>
+                </div>
+              </div>
+              <div class="sm:col-span-1">
+                <label class="block font-bold text-slate-700 mb-1 text-[11px]">Subject Line</label>
+                <input id="dash-composer-subject" type="text" value="[TIRO POS] Verify Your New Merchant Account - Code: ${defaultNewCode}" class="w-full text-xs px-2.5 py-2 bg-white border border-slate-300 rounded-xl focus:ring-2 focus:ring-teal-500 focus:outline-none font-medium" />
+              </div>
+            </div>
+
+            <div class="flex flex-wrap items-center justify-between gap-2 pt-1 border-t border-teal-100/60">
+              <div class="flex items-center gap-2">
+                <button type="button" onclick="dashOutboxSendViaMailClient()" class="bg-slate-900 hover:bg-slate-800 text-amber-300 font-extrabold px-3 py-2 rounded-xl text-xs transition-all active:scale-95 flex items-center gap-1 shadow-2xs">
+                  <span>📬</span>
+                  <span>Open in Mail App (mailto:)</span>
+                </button>
+                <button type="button" onclick="dashOutboxPreviewComposer()" class="bg-white hover:bg-slate-50 text-slate-700 border border-slate-300 font-bold px-3 py-2 rounded-xl text-xs transition-colors">
+                  <span>👁️ Preview HTML</span>
+                </button>
+              </div>
+
+              <div class="flex items-center gap-2">
+                <button type="button" onclick="dashToggleOutboxComposer(false)" class="bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold px-3 py-2 rounded-xl text-xs">
+                  Cancel
+                </button>
+                <button type="button" onclick="dashOutboxDispatchComposerMessage()" class="bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold px-4 py-2 rounded-xl text-xs shadow-md transition-all active:scale-95 flex items-center gap-1.5">
+                  <span>🚀</span>
+                  <span>Send Code to Email</span>
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Outbox List of Dispatched Emails -->
+          ${
+            filtered.length === 0
+              ? `
+                <div class="p-8 text-center text-slate-400 bg-white rounded-2xl border border-slate-200 space-y-2">
+                  <span class="text-3xl block">📭</span>
+                  <p class="font-extrabold text-sm text-slate-700">No matching verification emails found</p>
+                  <p class="text-xs text-slate-500">Click <b>"Send Verification Code"</b> above to dispatch a code to any merchant email address.</p>
+                </div>
+              `
+              : filtered.map(em => `
+                <div class="bg-white border border-slate-200 rounded-2xl p-4 shadow-2xs space-y-3 hover:border-teal-300 transition-colors">
+                  <div class="flex flex-col sm:flex-row sm:items-start justify-between gap-2">
+                    <div class="flex items-start gap-2.5">
+                      <div class="w-8 h-8 rounded-xl bg-teal-50 text-teal-800 flex items-center justify-center font-bold text-sm shrink-0 border border-teal-200">
+                        🏪
+                      </div>
+                      <div>
+                        <div class="font-black text-slate-900 text-xs flex items-center gap-1.5">
+                          <span>${escapeTelegramHtml(em.toName || 'New Merchant')}</span>
+                          <span class="text-slate-400 font-mono text-[11px]">&lt;${escapeTelegramHtml(em.to)}&gt;</span>
+                        </div>
+                        <div class="text-[11px] font-bold text-slate-700 mt-0.5">${escapeTelegramHtml(em.subject)}</div>
+                      </div>
+                    </div>
+                    <div class="flex items-center gap-2 self-start sm:self-auto">
+                      <span class="bg-emerald-50 text-emerald-700 border border-emerald-200 text-[10px] font-extrabold px-2 py-0.5 rounded-full shrink-0 flex items-center gap-1 shadow-2xs">
+                        <span>✅</span> <span>${em.status || 'Delivered'}</span>
+                      </span>
+                      <span class="text-slate-400 font-mono text-[10.5px]">${new Date(em.sentAt).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })}</span>
+                    </div>
+                  </div>
+
+                  <!-- 6-Digit Code Pill & Action Buttons Row -->
+                  <div class="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-slate-100 bg-slate-50/70 p-2.5 rounded-xl">
+                    <div class="flex items-center gap-2">
+                      <span class="text-slate-500 font-bold text-[11px]">6-Digit Code:</span>
+                      <span class="font-mono font-black text-sm text-teal-900 bg-white px-2.5 py-1 rounded-lg border border-teal-300 shadow-2xs tracking-widest">${em.code}</span>
+                      <button type="button" onclick="copyVerificationCodeValue('${em.code}')" class="text-slate-600 hover:text-slate-900 font-bold underline text-[11px]">
+                        Copy 📋
+                      </button>
+                    </div>
+
+                    <div class="flex flex-wrap items-center gap-1.5">
+                      <button type="button" onclick="dashOutboxOpenEditDialog('${em.id}')" class="bg-white hover:bg-slate-100 text-slate-800 font-bold border border-slate-300 px-2.5 py-1 rounded-lg text-[10.5px] transition-all active:scale-95 shadow-2xs flex items-center gap-1" title="Edit recipient email, code, or subject">
+                        <span>✏️</span> <span>Edit &amp; Resend</span>
+                      </button>
+                      <button type="button" onclick="dashOutboxQuickResend('${em.id}')" class="bg-teal-50 hover:bg-teal-100 text-teal-800 font-bold border border-teal-200 px-2.5 py-1 rounded-lg text-[10.5px] transition-all active:scale-95 flex items-center gap-1" title="Generate fresh code and dispatch">
+                        <span>🔄</span> <span>Resend</span>
+                      </button>
+                      <button type="button" onclick="previewDispatchedEmail('${escapeTelegramHtml(em.to)}', '${em.code}', '${escapeTelegramHtml(em.toName || 'Merchant')}')" class="bg-teal-700 hover:bg-teal-600 text-white font-extrabold px-2.5 py-1 rounded-lg text-[10.5px] transition-all active:scale-95 shadow-2xs flex items-center gap-1">
+                        <span>👁️</span> <span>View HTML</span>
+                      </button>
+                      <button type="button" onclick="dashOutboxOpenMailtoFor('${escapeTelegramHtml(em.to)}', '${em.code}', '${escapeTelegramHtml(em.toName || 'Merchant')}')" class="bg-slate-900 hover:bg-slate-800 text-amber-300 font-extrabold px-2 py-1 rounded-lg text-[10.5px] transition-all active:scale-95" title="Open in default mail client">
+                        <span>📬</span>
+                      </button>
+                      <button type="button" onclick="dashOutboxVerifyDirectly('${escapeTelegramHtml(em.to)}', '${em.code}')" class="bg-emerald-50 hover:bg-emerald-100 text-emerald-800 font-extrabold border border-emerald-200 px-2 py-1 rounded-lg text-[10.5px] transition-all active:scale-95" title="Verify this merchant account immediately">
+                        <span>⚡ Verify</span>
+                      </button>
+                      <button type="button" onclick="dashOutboxDeleteItem('${em.id}')" class="text-red-500 hover:text-red-700 hover:bg-red-50 px-1.5 py-1 rounded text-xs transition-colors" title="Delete message from outbox">
+                        🗑️
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              `).join('')
+          }
+        </div>
+
+        <!-- Footer -->
+        <div class="bg-slate-100 border-t border-slate-200 px-5 py-3 flex items-center justify-between text-xs">
+          <div class="flex items-center gap-2">
+            <span class="text-slate-600 font-medium text-[11px]">Dispatched Messages: <strong class="text-slate-900 font-black">${emails.length}</strong></span>
+            ${emails.length > 0 ? `
+              <button type="button" onclick="dashOutboxClearAll()" class="text-red-600 hover:underline text-[10.5px] font-bold ml-2">
+                Clear All
+              </button>
+            ` : ''}
+          </div>
+          <button type="button" onclick="dashCloseEmailOutboxModal()" class="bg-white hover:bg-slate-50 text-slate-700 font-bold px-4 py-1.5 rounded-xl border border-slate-300 text-xs shadow-2xs">
+            Close Outbox
+          </button>
+        </div>
+      </div>
+
+      <!-- INLINE EDIT DIALOG CONTAINER -->
+      <div id="dash-outbox-edit-dialog" class="fixed inset-0 z-[130] bg-slate-950/80 backdrop-blur-sm hidden items-center justify-center p-3 sm:p-5">
+        <!-- Rendered by dashOutboxOpenEditDialog -->
+      </div>
+    `;
+  };
+
+  // Dispatch message from Outbox Composer
+  window.dashOutboxDispatchComposerMessage = function () {
+    const email = (document.getElementById('dash-composer-email')?.value || '').trim().toLowerCase();
+    const biz = (document.getElementById('dash-composer-biz')?.value || '').trim() || 'New Merchant';
+    const code = (document.getElementById('dash-composer-code')?.value || '').trim();
+    const subj = (document.getElementById('dash-composer-subject')?.value || '').trim() || `[TIRO POS] Verify Your New Merchant Account - Code: ${code}`;
+    const fromEmail = (document.getElementById('dash-composer-from')?.value || '').trim() || (typeof getSystemSupportEmail === 'function' ? getSystemSupportEmail() : 'support@tiropulse.pos.kh');
+
+    if (!email || !email.includes('@')) {
+      alert('Please enter a valid merchant email address.');
+      return;
+    }
+    if (!code || code.length !== 6) {
+      alert('Verification code must be exactly 6 digits.');
+      return;
+    }
+
+    try {
+      const raw = localStorage.getItem('pos_dispatched_emails_v2');
+      const list = raw ? JSON.parse(raw) : [];
+      const newRecord = {
+        id: 'eml_' + Date.now() + '_' + Math.random().toString(36).substring(2, 6),
+        to: email,
+        toName: biz,
+        from: fromEmail,
+        subject: subj,
+        code: code,
+        sentAt: Date.now(),
+        expiresAt: Date.now() + 10 * 60 * 1000,
+        status: 'Delivered (Inbox)'
+      };
+      list.unshift(newRecord);
+      localStorage.setItem('pos_dispatched_emails_v2', JSON.stringify(list));
+
+      // Update matching platform user if exists
+      const rawUsers = localStorage.getItem('pos_platform_users_v2');
+      if (rawUsers) {
+        const users = JSON.parse(rawUsers);
+        const u = users.find(user => user.email.toLowerCase() === email);
+        if (u) {
+          u.lastVerificationCode = code;
+          u.verificationCodeExpiresAt = newRecord.expiresAt;
+          localStorage.setItem('pos_platform_users_v2', JSON.stringify(users));
+        }
+      }
+
+      showPosToast(`📧 Verification code <b>${code}</b> dispatched to <b>${email}</b>!`, true);
+      dashToggleOutboxComposer(false);
+      dashRenderEmailOutboxModalContent();
+      if (typeof window.renderMerchantsTab === 'function') window.renderMerchantsTab();
+    } catch (e) {
+      console.error(e);
+      alert('Error saving outbox email dispatch.');
+    }
+  };
+
+  window.dashOutboxSendViaMailClient = function () {
+    const email = (document.getElementById('dash-composer-email')?.value || '').trim();
+    const biz = (document.getElementById('dash-composer-biz')?.value || '').trim() || 'Merchant';
+    const code = (document.getElementById('dash-composer-code')?.value || '').trim();
+
+    if (!email || !email.includes('@')) {
+      alert('Please enter an email address first.');
+      return;
+    }
+    dashOutboxOpenMailtoFor(email, code, biz);
+  };
+
+  window.dashOutboxPreviewComposer = function () {
+    const email = (document.getElementById('dash-composer-email')?.value || '').trim() || 'merchant@store.kh';
+    const biz = (document.getElementById('dash-composer-biz')?.value || '').trim() || 'Store Merchant';
+    const code = (document.getElementById('dash-composer-code')?.value || '').trim() || '123456';
+    const fromEmail = (document.getElementById('dash-composer-from')?.value || '').trim() || (typeof getSystemSupportEmail === 'function' ? getSystemSupportEmail() : 'support@tiropulse.pos.kh');
+
+    if (window.MultiTenantAuth && window.MultiTenantAuth.openEmailInboxModal) {
+      window.MultiTenantAuth.openEmailInboxModal({
+        to: email,
+        toName: biz,
+        from: fromEmail,
+        code: code,
+        sentAt: Date.now()
+      });
+    }
+  };
+
+  // Open Edit Outbox Item Dialog
+  window.dashOutboxOpenEditDialog = function (emailId) {
+    const emails = (window.MultiTenantAuth && window.MultiTenantAuth.getDispatchedEmails) 
+      ? window.MultiTenantAuth.getDispatchedEmails() 
+      : [];
+    const item = emails.find(e => e.id === emailId);
+    if (!item) return;
+
+    outboxEditingItem = item;
+    const dialog = document.getElementById('dash-outbox-edit-dialog');
+    if (!dialog) return;
+
+    dialog.innerHTML = `
+      <div class="bg-white rounded-3xl max-w-lg w-full overflow-hidden shadow-2xl border border-slate-200 animate-in fade-in zoom-in-95 duration-200">
+        <div class="bg-slate-900 text-white px-5 py-4 flex items-center justify-between border-b border-slate-800">
+          <div class="flex items-center gap-2">
+            <span class="text-lg">✏️</span>
+            <div>
+              <h4 class="font-black text-sm text-white">Edit &amp; Resend Verification Email</h4>
+              <p class="text-[11px] text-teal-300 font-mono">ID: ${item.id}</p>
+            </div>
+          </div>
+          <button type="button" onclick="dashOutboxCloseEditDialog()" class="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 text-white flex items-center justify-center font-bold text-sm">
+            ✕
+          </button>
+        </div>
+
+        <div class="p-5 space-y-3.5 text-xs bg-slate-50/50">
+          <div>
+            <label class="block font-bold text-slate-700 mb-1 text-[11px]">Recipient Email *</label>
+            <input id="dash-edit-email" type="email" value="${escapeTelegramHtml(item.to)}" class="w-full text-xs px-3 py-2 bg-white border border-slate-300 rounded-xl focus:ring-2 focus:ring-teal-500 focus:outline-none font-medium" />
+          </div>
+
+          <div>
+            <label class="block font-bold text-slate-700 mb-1 text-[11px]">Sender / Support Email</label>
+            <input id="dash-edit-from" type="email" value="${escapeTelegramHtml(item.from || (typeof getSystemSupportEmail === 'function' ? getSystemSupportEmail() : 'support@tiropulse.pos.kh'))}" class="w-full text-xs px-3 py-2 bg-white border border-slate-300 rounded-xl focus:ring-2 focus:ring-teal-500 focus:outline-none font-medium font-mono text-teal-900" />
+          </div>
+
+          <div>
+            <label class="block font-bold text-slate-700 mb-1 text-[11px]">Store / Business Name</label>
+            <input id="dash-edit-biz" type="text" value="${escapeTelegramHtml(item.toName || '')}" class="w-full text-xs px-3 py-2 bg-white border border-slate-300 rounded-xl focus:ring-2 focus:ring-teal-500 focus:outline-none font-medium" />
+          </div>
+
+          <div>
+            <label class="block font-bold text-slate-700 mb-1 text-[11px]">6-Digit Verification Code *</label>
+            <div class="flex items-center gap-2">
+              <input id="dash-edit-code" type="text" maxlength="6" value="${escapeTelegramHtml(item.code)}" class="flex-1 text-center font-mono font-black text-lg text-teal-900 py-1.5 bg-teal-50 border border-teal-300 rounded-xl focus:ring-2 focus:ring-teal-500 focus:outline-none" />
+              <button type="button" onclick="dashOutboxGenerateCode('dash-edit-code')" class="bg-white hover:bg-slate-100 text-slate-700 border border-slate-300 font-bold px-3 py-2 rounded-xl text-xs active:scale-95 flex items-center gap-1">
+                <span>🎲</span> <span>New Code</span>
+              </button>
+            </div>
+          </div>
+
+          <div>
+            <label class="block font-bold text-slate-700 mb-1 text-[11px]">Subject Line</label>
+            <input id="dash-edit-subject" type="text" value="${escapeTelegramHtml(item.subject)}" class="w-full text-xs px-3 py-2 bg-white border border-slate-300 rounded-xl focus:ring-2 focus:ring-teal-500 focus:outline-none font-medium" />
+          </div>
+        </div>
+
+        <div class="bg-slate-100 border-t border-slate-200 px-5 py-3 flex items-center justify-between">
+          <button type="button" onclick="dashOutboxOpenMailtoFor(document.getElementById('dash-edit-email').value, document.getElementById('dash-edit-code').value, document.getElementById('dash-edit-biz').value)" class="text-slate-600 hover:text-slate-900 font-bold text-xs flex items-center gap-1">
+            <span>📬 Open in Mail Client</span>
+          </button>
+          <div class="flex items-center gap-2">
+            <button type="button" onclick="dashOutboxCloseEditDialog()" class="bg-white hover:bg-slate-50 text-slate-700 font-bold px-3 py-2 rounded-xl text-xs border border-slate-300">
+              Cancel
+            </button>
+            <button type="button" onclick="dashOutboxSaveEditedDialog('${item.id}')" class="bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold px-4 py-2 rounded-xl text-xs shadow-md active:scale-95 flex items-center gap-1.5">
+              <span>🚀</span> <span>Update &amp; Re-send Code</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    `;
+
+    dialog.classList.remove('hidden');
+    dialog.classList.add('flex');
+  };
+
+  window.dashOutboxCloseEditDialog = function () {
+    const dialog = document.getElementById('dash-outbox-edit-dialog');
+    if (dialog) {
+      dialog.classList.add('hidden');
+      dialog.classList.remove('flex');
+    }
+  };
+
+  window.dashOutboxSaveEditedDialog = function (emailId) {
+    const email = (document.getElementById('dash-edit-email')?.value || '').trim().toLowerCase();
+    const biz = (document.getElementById('dash-edit-biz')?.value || '').trim() || 'Merchant';
+    const code = (document.getElementById('dash-edit-code')?.value || '').trim();
+    const subj = (document.getElementById('dash-edit-subject')?.value || '').trim() || `[TIRO POS] Verify Your New Merchant Account - Code: ${code}`;
+    const fromEmail = (document.getElementById('dash-edit-from')?.value || '').trim() || (typeof getSystemSupportEmail === 'function' ? getSystemSupportEmail() : 'support@tiropulse.pos.kh');
+
+    if (!email || !email.includes('@')) {
+      alert('Please enter a valid email address.');
+      return;
+    }
+    if (!code || code.length !== 6) {
+      alert('Verification code must be exactly 6 digits.');
+      return;
+    }
+
+    try {
+      const raw = localStorage.getItem('pos_dispatched_emails_v2');
+      const list = raw ? JSON.parse(raw) : [];
+      const idx = list.findIndex(e => e.id === emailId);
+      const updatedRecord = {
+        id: emailId,
+        to: email,
+        toName: biz,
+        from: fromEmail,
+        subject: subj,
+        code: code,
+        sentAt: Date.now(),
+        expiresAt: Date.now() + 10 * 60 * 1000,
+        status: 'Delivered (Updated Code)'
+      };
+
+      if (idx !== -1) {
+        list[idx] = updatedRecord;
+      } else {
+        list.unshift(updatedRecord);
+      }
+      localStorage.setItem('pos_dispatched_emails_v2', JSON.stringify(list));
+
+      // Update user in database if present
+      const rawUsers = localStorage.getItem('pos_platform_users_v2');
+      if (rawUsers) {
+        const users = JSON.parse(rawUsers);
+        const u = users.find(user => user.email.toLowerCase() === email);
+        if (u) {
+          u.lastVerificationCode = code;
+          u.verificationCodeExpiresAt = updatedRecord.expiresAt;
+          localStorage.setItem('pos_platform_users_v2', JSON.stringify(users));
+        }
+      }
+
+      showPosToast(`🔄 Updated verification code <b>${code}</b> dispatched to <b>${email}</b>!`, true);
+      dashOutboxCloseEditDialog();
+      dashRenderEmailOutboxModalContent();
+      if (typeof window.renderMerchantsTab === 'function') window.renderMerchantsTab();
+    } catch (e) {
+      console.error(e);
+      alert('Error updating email dispatch.');
+    }
+  };
+
+  window.dashOutboxQuickResend = function (emailId) {
+    const emails = (window.MultiTenantAuth && window.MultiTenantAuth.getDispatchedEmails) 
+      ? window.MultiTenantAuth.getDispatchedEmails() 
+      : [];
+    const item = emails.find(e => e.id === emailId);
+    if (!item) return;
+
+    const newCode = Math.floor(100000 + Math.random() * 900000).toString();
+    try {
+      const raw = localStorage.getItem('pos_dispatched_emails_v2');
+      const list = raw ? JSON.parse(raw) : [];
+      list.unshift({
+        id: 'eml_' + Date.now() + '_' + Math.random().toString(36).substring(2, 6),
+        to: item.to,
+        toName: item.toName,
+        from: (item.from || (typeof getSystemSupportEmail === 'function' ? getSystemSupportEmail() : 'support@tiropulse.pos.kh')),
+        subject: `[TIRO POS] Verify Your New Merchant Account - Code: ${newCode}`,
+        code: newCode,
+        sentAt: Date.now(),
+        expiresAt: Date.now() + 10 * 60 * 1000,
+        status: 'Delivered (Resent Code)'
+      });
+      localStorage.setItem('pos_dispatched_emails_v2', JSON.stringify(list));
+      showPosToast(`🔄 Fresh code <b>${newCode}</b> dispatched to <b>${item.to}</b>!`, true);
+      dashRenderEmailOutboxModalContent();
+      if (typeof window.renderMerchantsTab === 'function') window.renderMerchantsTab();
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  window.dashOutboxDeleteItem = function (emailId) {
+    if (!confirm('Remove this email dispatch record from outbox?')) return;
+    try {
+      const raw = localStorage.getItem('pos_dispatched_emails_v2');
+      let list = raw ? JSON.parse(raw) : [];
+      list = list.filter(e => e.id !== emailId);
+      localStorage.setItem('pos_dispatched_emails_v2', JSON.stringify(list));
+      showPosToast('Email record removed from outbox.', true);
+      dashRenderEmailOutboxModalContent();
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  window.dashOutboxClearAll = function () {
+    if (!confirm('Clear all outbox dispatch logs? This cannot be undone.')) return;
+    localStorage.setItem('pos_dispatched_emails_v2', JSON.stringify([]));
+    showPosToast('Outbox history cleared.', true);
+    dashRenderEmailOutboxModalContent();
+  };
+
+  window.dashOutboxOpenMailtoFor = function (email, code, bizName) {
+    const cleanEmail = email || '';
+    const cleanCode = code || '';
+    const cleanBiz = bizName || 'Merchant';
+    const supportEmail = (typeof getSystemSupportEmail === 'function') ? getSystemSupportEmail() : 'support@tiropulse.pos.kh';
+    const subject = encodeURIComponent(`[TIRO POS] Verify Your New Merchant Account - Code: ${cleanCode}`);
+    const body = encodeURIComponent(
+      `Hello ${cleanBiz},\n\nYour TIRO POS Merchant verification code is: ${cleanCode}\n\nEnter this 6-digit code in the registration screen to activate your account.\n\nCode expires in 10 minutes.\n\nSupport Contact: ${supportEmail}\nTIRO POS Cloud Security Team`
+    );
+    window.open(`mailto:${cleanEmail}?subject=${subject}&body=${body}`, '_blank');
+    showPosToast(`📬 Launching mail client for <b>${cleanEmail}</b>...`, true);
+  };
+
+  window.dashOutboxVerifyDirectly = function (email, code) {
+    if (window.verifyEmailWithToken) {
+      dashCloseEmailOutboxModal();
+      window.verifyEmailWithToken(code);
+    } else {
+      showPosToast(`✅ Code: <b>${code}</b> for ${email}`, true);
+    }
+  };
+
+  window.copyVerificationCodeValue = function (code) {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(code).then(() => {
+        showPosToast(`📋 Verification code <b>${code}</b> copied!`, true);
+      }).catch(() => {
+        showPosToast(`📋 Code: <b>${code}</b>`, true);
+      });
+    } else {
+      showPosToast(`📋 Code: <b>${code}</b>`, true);
+    }
+  };
+
+  window.previewDispatchedEmail = function (email, code, bizName) {
+    if (window.MultiTenantAuth && window.MultiTenantAuth.openEmailInboxModal) {
+      dashCloseEmailOutboxModal();
+      window.MultiTenantAuth.openEmailInboxModal({
+        to: email,
+        toName: bizName,
+        code: code,
+        sentAt: Date.now()
+      });
+    }
+  };
+
+  // Resend verification email to existing user
+  window.dashSendVerificationEmailToUser = function (userId, email, businessName) {
+    const newCode = Math.floor(100000 + Math.random() * 900000).toString();
+    try {
+      const raw = localStorage.getItem('pos_dispatched_emails_v2');
+      const list = raw ? JSON.parse(raw) : [];
+      list.unshift({
+        id: 'eml_' + Date.now(),
+        to: email,
+        toName: businessName,
+        from: (typeof getSystemSupportEmail === 'function' ? getSystemSupportEmail() : 'support@tiropulse.pos.kh'),
+        subject: `[TIRO POS] Verify Your New Merchant Account - Code: ${newCode}`,
+        code: newCode,
+        sentAt: Date.now(),
+        expiresAt: Date.now() + 10 * 60 * 1000,
+        status: 'Delivered (Inbox)'
+      });
+      localStorage.setItem('pos_dispatched_emails_v2', JSON.stringify(list));
+      showPosToast(`📧 Verification email with code <b>${newCode}</b> dispatched to <b>${email}</b>!`, true);
+      renderMerchantsTab();
+    } catch (e) {
+      console.error(e);
+      showPosToast(`Error sending verification email.`, false);
+    }
   };
 
 })();

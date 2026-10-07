@@ -299,10 +299,16 @@
             </button>
           </div>
 
-          <!-- Staff Editor Login / Mode Toggle -->
-          <button id="admin-nav-btn" onclick="handleAdminNavClick()" class="flex items-center gap-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 px-2.5 sm:px-3 py-2 sm:py-2.5 rounded-xl font-bold text-xs border border-slate-200 transition-all shadow-sm active:scale-95" title="Store Manager / Editor Portal">
+          <!-- Multi-Tenant Merchant Portal / Auth Board -->
+          <button type="button" onclick="openAuthBoardModal('signin')" class="flex items-center gap-1.5 bg-gradient-to-r from-slate-900 to-[#007A78] hover:from-black hover:to-teal-700 text-white px-2.5 sm:px-3 py-2 sm:py-2.5 rounded-xl font-bold text-xs transition-all shadow-md active:scale-95 border border-teal-400/30" title="Multi-Merchant POS Portal & Role-Based Access">
+            <span>🏢</span>
+            <span class="hidden sm:inline">Merchant Portal</span>
+          </button>
+
+          <!-- Staff Sign In / Mode Toggle -->
+          <button id="admin-nav-btn" onclick="handleAdminNavClick()" class="flex items-center gap-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 px-2.5 sm:px-3 py-2 sm:py-2.5 rounded-xl font-bold text-xs border border-slate-200 transition-all shadow-sm active:scale-95" title="Store Manager / Editor Sign In">
             <svg class="w-4 h-4 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
-            <span id="admin-nav-text" class="hidden md:inline">Editor Login</span>
+            <span id="admin-nav-text" class="hidden md:inline">Sign In</span>
           </button>
 
           <!-- Admin Sales Report Quick Nav Button -->
@@ -319,12 +325,6 @@
           <button onclick="openItemEditorModal()" class="admin-only-btn hidden flex items-center gap-1.5 bg-gradient-to-r from-brand to-brand-dark hover:from-brand-dark hover:to-slate-950 text-white font-extrabold px-2.5 sm:px-3 py-2 sm:py-2.5 rounded-xl text-xs shadow-md transition-all active:scale-95 border border-brand-accent/40" title="Add a new product, coffee drink, cosmetic, or service (Admin Only)">
             <span class="text-sm font-black text-amber-400">➕</span>
             <span class="hidden lg:inline">+ Add Item</span>
-          </button>
-
-          <!-- QR Menu Modal Trigger Button -->
-          <button onclick="openQrMenuModal()" class="flex items-center gap-1.5 bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-300 hover:to-amber-400 text-slate-950 font-black px-2.5 sm:px-3 py-2 sm:py-2.5 rounded-xl text-xs shadow-sm transition-all active:scale-95 border border-amber-300" title="Open QR Code for Menu & Table Ordering">
-            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z"/></svg>
-            <span class="hidden md:inline">QR Menu</span>
           </button>
 
           <button id="open-cart-btn" onclick="toggleCartModal(true)" class="relative flex items-center gap-2 bg-brand text-white px-3 sm:px-4 py-2 sm:py-2.5 rounded-xl font-bold hover:bg-brand-dark transition-all shadow-md active:scale-95">
@@ -1580,6 +1580,12 @@
         <span>APK (48MB)</span>
       </a>
 
+      <!-- QR Menu Modal Trigger Button -->
+      <button onclick="openQrMenuModal()" class="flex items-center gap-1.5 bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-300 hover:to-amber-400 text-slate-950 font-black px-2.5 sm:px-3 py-2 rounded-xl text-xs shadow-md transition-all active:scale-95 border border-amber-300" title="Open QR Code for Menu & Table Ordering">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z"/></svg>
+        <span class="hidden sm:inline">QR Menu</span>
+      </button>
+
       <!-- Client Sign Up / Profile Action -->
       <button id="floating-client-btn" onclick="handleFloatingClientClick()" class="flex items-center gap-1.5 bg-amber-400 hover:bg-amber-300 text-slate-950 px-3 py-2 rounded-xl font-black text-xs shadow transition-all active:scale-95" title="Sign up & get 50 loyalty points">
         <span>🎁</span>
@@ -1699,14 +1705,13 @@
       <div class="bg-slate-950/80 px-4 sm:px-6 py-2.5 border-b border-slate-800 flex flex-wrap items-center justify-between gap-2 shrink-0">
         <div class="flex items-center gap-2 overflow-x-auto py-1 scrollbar-none">
           <span class="text-[11px] font-bold text-slate-400 uppercase tracking-wider mr-1">Quick Menus:</span>
-          <!-- MENU: CREATE USER FOR LOG IN DASHBOARD BUTTON -->
-          <button onclick="openAdminUsersModal()" class="bg-gradient-to-r from-sky-500 via-indigo-500 to-purple-600 hover:from-sky-400 hover:to-indigo-500 text-white font-extrabold text-xs px-3.5 py-1.5 rounded-xl shadow-md flex items-center gap-1.5 border border-sky-300/40 active:scale-95 transition-all">
-            <span>👤</span>
-            <span>+ Create User for Dashboard</span>
-          </button>
           <button onclick="closeAdminDashboardModal(); openSalesReportModal();" class="bg-slate-800 hover:bg-slate-700 text-emerald-400 border border-emerald-500/30 font-bold text-xs px-3 py-1.5 rounded-xl flex items-center gap-1.5 active:scale-95 transition-all">
             <span>📊</span>
             <span>Sales &amp; Financial Report</span>
+          </button>
+          <button onclick="closeAdminDashboardModal(); if (typeof showExecutiveDashboardView === 'function') { showExecutiveDashboardView('accounting'); } else if (typeof switchDashboardTab === 'function') { switchDashboardTab('accounting'); }" class="bg-slate-800 hover:bg-slate-700 text-teal-300 border border-teal-500/30 font-bold text-xs px-3 py-1.5 rounded-xl flex items-center gap-1.5 active:scale-95 transition-all" title="Accounting Reports, P&amp;L, Balance Sheet, VAT &amp; Expenses">
+            <span>📑</span>
+            <span>Accounting Report</span>
           </button>
           <a href="./app-debug.apk" download="TR-Store-Cafe.apk" class="bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-extrabold text-xs px-3.5 py-1.5 rounded-xl shadow-md flex items-center gap-1.5 border border-emerald-400/50 active:scale-95 transition-all" title="Download Android APK File">
             <span>📱</span>
@@ -2728,10 +2733,14 @@
           <h4 class="font-black text-slate-900 text-xs uppercase tracking-wider text-brand">
             💵 2. Currency Rates & Top Announcement
           </h4>
-          <div class="grid grid-cols-2 gap-3">
+          <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <div>
               <label class="block font-bold text-slate-700 mb-1">1 USD to KHR Rate (៛)</label>
               <input id="setting-khr-rate" type="number" step="10" value="4100" class="w-full border border-slate-300 rounded-xl px-3 py-2 text-xs font-bold text-emerald-800 focus:ring-2 focus:ring-brand focus:outline-none" />
+            </div>
+            <div>
+              <label class="block font-bold text-slate-700 mb-1">Sales Tax Rate (% VAT)</label>
+              <input id="setting-tax-rate" type="number" step="0.5" min="0" max="100" value="10" class="w-full border border-slate-300 rounded-xl px-3 py-2 text-xs font-bold text-emerald-800 focus:ring-2 focus:ring-brand focus:outline-none" />
             </div>
             <div>
               <label class="block font-bold text-slate-700 mb-1">Points per $1 Spent</label>
@@ -4387,6 +4396,7 @@
       brandName: "TR COFFEE",
       brandSub: "កាហ្វេ ទីរ៉ូ • Cambodia",
       khrRate: 4100,
+      salesTaxRate: 10,
       ptsRate: 10,
       wifiName: "TR-Coffee-Guest",
       wifiPassword: "trcoffee2026",
@@ -4972,6 +4982,7 @@
     // LocalStorage Persistent State
     const storedSettings = JSON.parse(localStorage.getItem('tr_coffee_settings')) || {};
     let SITE_SETTINGS = { ...DEFAULT_SETTINGS, ...storedSettings };
+    window.SITE_SETTINGS = SITE_SETTINGS;
     let storedAdmins = JSON.parse(localStorage.getItem('tr_coffee_admins')) || [];
     let ADMIN_USERS = Array.isArray(storedAdmins) && storedAdmins.length > 0 ? storedAdmins : JSON.parse(JSON.stringify(DEFAULT_ADMIN_USERS));
 
@@ -6090,6 +6101,9 @@
       const badge = document.getElementById('admin-user-badge');
       const navBtn = document.getElementById('admin-nav-btn');
       const navText = document.getElementById('admin-nav-text');
+      const floatingEditorBtn = document.getElementById('floating-editor-btn');
+      const floatingEditorText = document.getElementById('floating-editor-text');
+      const floatingEditorIcon = document.getElementById('floating-editor-icon');
       const adminOnlyButtons = document.querySelectorAll('.admin-only-btn');
 
       if (currentAdmin) {
@@ -6100,7 +6114,12 @@
         if (navBtn) {
           navBtn.className = "flex items-center gap-1.5 bg-emerald-100 hover:bg-emerald-200 text-emerald-900 border border-emerald-300 px-3 py-2.5 rounded-xl font-bold text-xs transition-all shadow-sm active:scale-95";
         }
-        if (navText) navText.innerText = "🟢 Editor Active";
+        if (navText) navText.innerText = "🟢 Signed In";
+        if (floatingEditorBtn) {
+          floatingEditorBtn.className = "flex items-center gap-1.5 bg-emerald-500/30 hover:bg-emerald-500/40 text-emerald-300 border border-emerald-400/50 px-2.5 sm:px-3 py-2 rounded-xl font-bold text-xs shadow-md transition-all active:scale-95";
+        }
+        if (floatingEditorText) floatingEditorText.innerText = "Signed In";
+        if (floatingEditorIcon) floatingEditorIcon.innerText = "🟢";
         // Hide all extra menus in Admin user: only Executive Dashboard & Log Out are shown
         adminOnlyButtons.forEach(btn => btn.classList.add('hidden'));
         const qrWifiBox = document.getElementById('table-qr-wifi-box');
@@ -6110,7 +6129,12 @@
         if (navBtn) {
           navBtn.className = "flex items-center gap-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 px-3 py-2.5 rounded-xl font-bold text-xs border border-slate-200 transition-all shadow-sm active:scale-95";
         }
-        if (navText) navText.innerText = "Editor Login";
+        if (navText) navText.innerText = "Sign In";
+        if (floatingEditorBtn) {
+          floatingEditorBtn.className = "flex items-center gap-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-600 px-2.5 sm:px-3 py-2 rounded-xl font-bold text-xs shadow-md transition-all active:scale-95";
+        }
+        if (floatingEditorText) floatingEditorText.innerText = "Sign In";
+        if (floatingEditorIcon) floatingEditorIcon.innerText = "⚙️";
         adminOnlyButtons.forEach(btn => btn.classList.add('hidden'));
         const qrWifiBoxHide = document.getElementById('table-qr-wifi-box');
         if (qrWifiBoxHide) qrWifiBoxHide.classList.add('hidden');
@@ -8339,6 +8363,10 @@
     }
 
     function openAdminLoginModal() {
+      if (typeof openAuthBoardModal === 'function') {
+        openAuthBoardModal('signin');
+        return;
+      }
       document.getElementById('admin-login-error').classList.add('hidden');
       const modal = document.getElementById('admin-login-modal');
       modal.classList.remove('hidden');
@@ -9800,6 +9828,11 @@
 
       // Currency & Rates
       document.getElementById('setting-khr-rate').value = SITE_SETTINGS.khrRate || 4100;
+      const taxRateInp = document.getElementById('setting-tax-rate');
+      if (taxRateInp) {
+        const storedTax = localStorage.getItem('tr_coffee_sales_tax_rate');
+        taxRateInp.value = (SITE_SETTINGS.salesTaxRate !== undefined) ? SITE_SETTINGS.salesTaxRate : (storedTax ? parseFloat(storedTax) : 10);
+      }
       document.getElementById('setting-pts-rate').value = SITE_SETTINGS.ptsRate || 10;
       document.getElementById('setting-announcement-text').value = SITE_SETTINGS.announcement || '';
 
@@ -9916,6 +9949,15 @@
 
       // Currency & Rates
       SITE_SETTINGS.khrRate = Number(document.getElementById('setting-khr-rate').value) || 4100;
+      const taxRateInp = document.getElementById('setting-tax-rate');
+      if (taxRateInp) {
+        const parsedTax = parseFloat(taxRateInp.value);
+        const taxVal = isNaN(parsedTax) ? 10 : Math.max(0, parsedTax);
+        SITE_SETTINGS.salesTaxRate = taxVal;
+        try { localStorage.setItem('tr_coffee_sales_tax_rate', taxVal.toString()); } catch(e){}
+        if (typeof window.updateSalesTaxUI === 'function') window.updateSalesTaxUI();
+        if (typeof window.renderDashPosCartUI === 'function') window.renderDashPosCartUI();
+      }
       SITE_SETTINGS.ptsRate = Number(document.getElementById('setting-pts-rate').value) || 10;
       SITE_SETTINGS.announcement = document.getElementById('setting-announcement-text').value.trim();
 
@@ -10162,11 +10204,11 @@
           dateStyle: 'medium',
           timeStyle: 'medium'
         });
-        const testText = `✈️ <b>TR STORE & CAFE • TELEGRAM ALERT TEST</b>\n` +
+        const testText = `✈️ <b>TR STORE &amp; CAFE • TELEGRAM ALERT TEST</b>\n` +
           `━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
           `✅ <b>Status:</b> Telegram Bot Connected Successfully!\n` +
           `🕒 <b>Timestamp:</b> ${timestamp}\n` +
-          `🏪 <b>Store:</b> TR Coffee & Retail Main Branch\n` +
+          `🏪 <b>Store:</b> TR Coffee &amp; Retail Main Branch\n` +
           `📱 <b>Target Chat ID:</b> <code>${chatId}</code>\n` +
           `👤 <b>Admin User:</b> Chandara Nong (@chandaranong)\n` +
           `━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
@@ -10760,35 +10802,75 @@
     window.quickFillAndLogin = quickFillAndLogin;
     window.quickLoginStaff = quickLoginStaff;
 
+    function escapeTgHtml(str) {
+      if (!str) return '';
+      return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    }
+
     async function sendTransactionToTelegram(sale) {
-      if (SITE_SETTINGS.telegramEnabled === false) return;
-      const token = SITE_SETTINGS.telegramToken;
-      const chatId = SITE_SETTINGS.telegramChatId;
+      if (!sale) return;
+      if (SITE_SETTINGS && SITE_SETTINGS.telegramEnabled === false) return;
+      const token = (SITE_SETTINGS && SITE_SETTINGS.telegramToken) || "7942738910:AAH-xXJgVfQ6aF3WvXyv770gZk3qYkZ88M0";
+      const chatId = (SITE_SETTINGS && SITE_SETTINGS.telegramChatId) || "-1002345678901";
       if (!token || !chatId) {
         console.warn("Telegram push skipped: missing token or chatId");
         return;
       }
 
       try {
-        const itemsList = (sale.items || []).map(i => `• <b>${i.name || 'Product'}</b> x${i.qty || 1} — $${Number(i.price || 0).toFixed(2)}`).join('\n');
-        const paymentLabel = sale.tender === 'KHQR' ? '🔴 Bakong Universal KHQR' : '💵 Cash';
-        const msg = `☕ <b>NEW TRANSACTION • TR COFFEE & CAFE</b> 🇰🇭\n━━━━━━━━━━━━━━━━━━━━━━\n🧾 <b>Order:</b> <code>${sale.orderId}</code>\n📅 <b>Date:</b> ${sale.dateStr || ''} ${sale.timeStr || ''}\n👤 <b>Customer:</b> ${sale.customerName || 'Valued Customer'}${sale.customerPhone ? ' (' + sale.customerPhone + ')' : ''}\n💳 <b>Payment:</b> ${paymentLabel}\n🏪 <b>Branch:</b> ${sale.branch || 'BKK1 Flagship Branch'}\n👨‍💼 <b>Cashier/Terminal:</b> ${sale.cashier || 'Online Store'}\n━━━━━━━━━━━━━━━━━━━━━━\n🛒 <b>Items Ordered:</b>\n${itemsList || '• Standard Order'}\n━━━━━━━━━━━━━━━━━━━━━━\n💰 <b>Grand Total:</b> <b>$${Number(sale.totalUsd || 0).toFixed(2)}</b> (៛${Number(sale.totalKhr || Math.round((sale.totalUsd || 0) * 4100)).toLocaleString()} KHR)\n⭐️ <b>Loyalty Points:</b> +${sale.pointsIssued || 0} pts\n━━━━━━━━━━━━━━━━━━━━━━\n✅ <i>Transaction successfully saved in TR Store Database</i>`;
+        const itemsList = (sale.items || []).map(i => {
+          const sName = escapeTgHtml(i.name || 'Product');
+          const sQty = i.qty || 1;
+          const sPrice = Number(i.price || 0).toFixed(2);
+          return `• <b>${sName}</b> x${sQty} — $${sPrice}`;
+        }).join('\n') || '• Standard Order';
 
-        const res = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+        const paymentLabel = sale.tender === 'KHQR' ? '🔴 Bakong Universal KHQR' : '💵 Cash';
+        const sOrder = escapeTgHtml(sale.orderId || '#TR-0000');
+        const sDate = escapeTgHtml(sale.dateStr || new Date().toISOString().split('T')[0]);
+        const sTime = escapeTgHtml(sale.timeStr || new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }));
+        const sCust = escapeTgHtml(sale.customerName || 'Valued Customer');
+        const sPhone = sale.customerPhone ? ` (${escapeTgHtml(sale.customerPhone)})` : '';
+        const sBranch = escapeTgHtml(sale.branch || 'BKK1 Flagship Branch');
+        const sCashier = escapeTgHtml(sale.cashier || 'Store Cashier');
+
+        const msg = `☕ <b>NEW TRANSACTION • TR COFFEE &amp; CAFE</b> 🇰🇭\n━━━━━━━━━━━━━━━━━━━━━━\n🧾 <b>Order:</b> <code>${sOrder}</code>\n📅 <b>Date:</b> ${sDate} ${sTime}\n👤 <b>Customer:</b> ${sCust}${sPhone}\n💳 <b>Payment:</b> ${paymentLabel}\n🏪 <b>Branch:</b> ${sBranch}\n👨‍💼 <b>Cashier/Terminal:</b> ${sCashier}\n━━━━━━━━━━━━━━━━━━━━━━\n🛒 <b>Items Ordered:</b>\n${itemsList}\n━━━━━━━━━━━━━━━━━━━━━━\n💰 <b>Grand Total:</b> <b>$${Number(sale.totalUsd || 0).toFixed(2)}</b> (៛${Number(sale.totalKhr || Math.round((sale.totalUsd || 0) * 4100)).toLocaleString()} KHR)\n⭐️ <b>Loyalty Points:</b> +${sale.pointsIssued || 0} pts\n━━━━━━━━━━━━━━━━━━━━━━\n✅ <i>Transaction successfully saved in TR Store Database</i>`;
+
+        let res = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            chat_id: chatId,
+            chat_id: chatId.trim(),
             text: msg,
-            parse_mode: 'HTML'
+            parse_mode: 'HTML',
+            disable_web_page_preview: true
           })
         });
-        const data = await res.json();
+        let data = await res.json();
+
+        // Plain text fallback if HTML entity parse fails
+        if (!data.ok && data.description && data.description.includes("can't parse entities")) {
+          const plainMsg = msg.replace(/<[^>]*>/g, '');
+          res = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              chat_id: chatId.trim(),
+              text: plainMsg,
+              disable_web_page_preview: true
+            })
+          });
+          data = await res.json();
+        }
+
         console.log("Telegram transaction alert response:", data);
       } catch (err) {
         console.error("Failed to send transaction to Telegram:", err);
       }
     }
+
+    window.sendTransactionToTelegram = sendTransactionToTelegram;
+    window.notifyTelegramSale = sendTransactionToTelegram;
 
     function exportDataAsJson() {
       const payload = {
@@ -11779,6 +11861,7 @@
 
       SALES_DB.unshift(newOrder);
       localStorage.setItem('tr_coffee_sales', JSON.stringify(SALES_DB));
+      sendTransactionToTelegram(newOrder);
       renderSalesReportUI();
       alert(`✅ New sale recorded: Order ${newOrder.orderId} for ${formatUsd(subtotal)} via ${newOrder.tender}!`);
     }
@@ -13226,6 +13309,7 @@
       }
     });
   </script>
+  <script src="./multi_tenant_auth.js"></script>
   <script src="./dashboard.js"></script>
 </body>
 </html>
