@@ -259,6 +259,9 @@
             <button type="button" onclick="showCustomerStorefrontView()" class="bg-white hover:bg-slate-50 text-slate-700 border border-slate-300 font-bold text-xs px-3 py-1.5 rounded-xl shadow-xs flex items-center gap-1.5 active:scale-95 transition-all">
               <span>🛍️</span><span>Storefront</span>
             </button>
+            <button type="button" onclick="logoutAdmin()" class="bg-red-950/80 hover:bg-red-900 text-red-200 border border-red-800/60 font-bold text-xs px-3 py-1.5 rounded-xl shadow-xs flex items-center gap-1.5 active:scale-95 transition-all" title="Log Out of Admin Session">
+              <span>🚪</span><span>Log Out</span>
+            </button>
           </div>
         </header>
 
@@ -807,6 +810,19 @@
                     <p class="text-slate-500 text-[11px] leading-relaxed">Active exchange rate for Dual Currency display ($1 = 4,100 KHR).</p>
                   </div>
                   <button type="button" onclick="openSettingsModal()" class="bg-slate-800 hover:bg-slate-900 text-white font-bold py-2 px-3 rounded-lg mt-2 w-full transition-all">Edit General Settings</button>
+                </div>
+
+                <!-- 6. Hero Tabs & TV Display Custom Words -->
+                <div class="border border-amber-300 p-4 rounded-xl space-y-2 flex flex-col justify-between bg-amber-50/70">
+                  <div>
+                    <div class="font-extrabold text-sm text-slate-900 flex items-center gap-1.5 mb-1">
+                      <span>📺</span><span>Hero Card Tabs &amp; TV Display Words</span>
+                    </div>
+                    <p class="text-slate-600 text-[11px] leading-relaxed">Customize department tab texts (Live TV, Coffee, Cosmetics, Service) &amp; TV button icon/label in Admin settings.</p>
+                  </div>
+                  <button type="button" onclick="openSettingsModal('hero-tabs')" class="bg-amber-500 hover:bg-amber-600 text-slate-950 font-black py-2 px-3 rounded-lg mt-2 w-full transition-all shadow-xs flex items-center justify-center gap-1.5 cursor-pointer">
+                    <span>✏️ Edit Tab &amp; TV Words</span>
+                  </button>
                 </div>
               </div>
             </div>
@@ -4114,6 +4130,14 @@ Cash Position:          $${(m.cashInDrawerUsd + m.bakongBankAccountUsd).toFixed(
     if (storefront) storefront.classList.remove('hidden');
 
     localStorage.setItem('tr_active_view', 'storefront');
+
+    // Synchronize admin session so user is still signed in on storefront and can edit
+    if (typeof window.syncAdminSessionAndUI === 'function') {
+      window.syncAdminSessionAndUI();
+    } else {
+      if (typeof updateAdminUI === 'function') updateAdminUI();
+      if (typeof renderMenu === 'function') renderMenu();
+    }
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
@@ -5645,9 +5669,18 @@ Cash Position:          $${(m.cashInDrawerUsd + m.bakongBankAccountUsd).toFixed(
   }
 
   window.dashConfirmBakongPosPaid = function() {
+    const btn = document.querySelector('#dash-pos-bakong-modal button[onclick*="dashConfirmBakongPosPaid"]');
+    if (btn) {
+      btn.innerHTML = `<span class="inline-block animate-spin mr-1.5">⏳</span><span>Verifying &amp; Finalizing Order...</span>`;
+    }
     const orderData = pendingPosOrder;
-    dashCloseBakongPosModal();
-    dashFinalizePosOrder('KHQR', orderData);
+    setTimeout(() => {
+      dashCloseBakongPosModal();
+      dashFinalizePosOrder('KHQR', orderData);
+      if (btn) {
+        btn.innerHTML = `<span>✓</span><span>I Have Paid (ខ្ញុំបានទូទាត់រួចហើយ)</span>`;
+      }
+    }, 350);
   };
 
   window.dashCheckoutPos = function(tender) {
@@ -5934,6 +5967,17 @@ ${itemsSummary}
     dashCloseCheckBillModal();
     renderDashPosCartUI();
     renderPosTab();
+
+    // CRITICAL: Clear storefront cart so checked bills on POS do not persist on storefront cart
+    if (typeof window.clearStorefrontCart === 'function') {
+      try { window.clearStorefrontCart(); } catch(e){}
+    } else if (Array.isArray(window.cart)) {
+      window.cart.length = 0;
+      try { localStorage.removeItem('tr_coffee_cart'); } catch(e){}
+      if (typeof window.updateCartDisplay === 'function') {
+        try { window.updateCartDisplay(); } catch(e){}
+      }
+    }
 
     // Open Receipt Modal
     dashOpenPosReceiptModal(completedSale);

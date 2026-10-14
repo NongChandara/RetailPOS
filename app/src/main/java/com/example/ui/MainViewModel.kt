@@ -6,6 +6,7 @@ import androidx.lifecycle.viewModelScope
 import com.example.data.AppDatabase
 import com.example.data.model.ActivityCategory
 import com.example.data.model.ActivityLogEntity
+import com.example.data.model.AdvertisementEntity
 import com.example.data.model.BranchEntity
 import com.example.data.model.CategoryEntity
 import com.example.data.model.ClientEntity
@@ -23,6 +24,10 @@ import com.example.ui.reports.ProductSalesPerformance
 import com.example.ui.reports.ReportPeriod
 import com.example.ui.reports.SalesReportSummary
 import com.example.ui.reports.StaffSalesPerformance
+import com.example.printer.FormattedThermalDoc
+import com.example.printer.PrintResult
+import com.example.printer.ThermalPrinterConfig
+import com.example.printer.ThermalPrinterManager
 import com.example.util.CurrencyMode
 import com.example.util.CurrencyUtils
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -88,6 +93,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val repository = RetailRepository(database)
     private val telegramNotificationService = com.example.service.TelegramNotificationService(application)
     val telegramConfig: StateFlow<com.example.service.TelegramConfig> = telegramNotificationService.config
+
+    val thermalPrinterManager = ThermalPrinterManager.getInstance(application)
+    val printerConfig: StateFlow<ThermalPrinterConfig> = thermalPrinterManager.config
+    val isThermalPrinting: StateFlow<Boolean> = thermalPrinterManager.isPrinting
+    val activeThermalPreviewDoc: StateFlow<FormattedThermalDoc?> = thermalPrinterManager.activePreviewDoc
 
     init {
         // Ensure initial seed data and catalog synchronization are loaded on launch
@@ -238,6 +248,23 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     val allBranches: StateFlow<List<BranchEntity>> = repository.allBranchesList
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    val allAdvertisements: StateFlow<List<AdvertisementEntity>> = repository.allAdvertisements
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    val runningAdvertisements: StateFlow<List<AdvertisementEntity>> = repository.runningAdvertisements
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    private val _showAdBanner = MutableStateFlow(true)
+    val showAdBanner: StateFlow<Boolean> = _showAdBanner.asStateFlow()
+
+    fun toggleShowAdBanner() {
+        _showAdBanner.value = !_showAdBanner.value
+    }
+
+    fun setShowAdBanner(show: Boolean) {
+        _showAdBanner.value = show
+    }
 
     // Dynamic category names from registered categories and existing product records
     val categoryNames: StateFlow<List<String>> = combine(allCategories, allProducts) { categories, products ->
@@ -964,6 +991,22 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    private val _hideFreeItemsForClients = MutableStateFlow(false)
+    val hideFreeItemsForClients: StateFlow<Boolean> = _hideFreeItemsForClients.asStateFlow()
+
+    fun toggleHideFreeItemsForClients() {
+        _hideFreeItemsForClients.value = !_hideFreeItemsForClients.value
+        _toastMessage.value = if (_hideFreeItemsForClients.value) {
+            "👁️ Free items banner HIDDEN for clients in POS"
+        } else {
+            "👁️ Free items banner VISIBLE for clients in POS"
+        }
+    }
+
+    fun setHideFreeItemsForClients(hide: Boolean) {
+        _hideFreeItemsForClients.value = hide
+    }
+
     fun applyBuy10Get1Example() {
         val products = allProducts.value
         val target = products.firstOrNull { it.name.contains("Iced Coffee", ignoreCase = true) }
@@ -1102,7 +1145,84 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 items = saleItems,
                 khrRate = _khrExchangeRate.value
             )
+
+            // Automatic Thermal Receipt & Kitchen Order Ticket printing
+            thermalPrinterManager.handleAutoPrintOnCheckout(
+                sale = completedSaleRecord,
+                items = saleItems,
+                khrRate = _khrExchangeRate.value,
+                branch = activeBr
+            )
         }
+    }
+
+    // Thermal Printer Dispatcher Methods
+    fun printThermalCustomerReceipt(
+        sale: SaleEntity,
+        items: List<SaleItemEntity>,
+        forcePreview: Boolean = false
+    ) {
+        viewModelScope.launch {
+            val saleBranch = allBranches.value.firstOrNull { it.name.equals(sale.branchName, ignoreCase = true) } ?: _activeBranch.value
+            val result = thermalPrinterManager.printCustomerReceipt(
+                sale = sale,
+                items = items,
+                khrRate = _khrExchangeRate.value,
+                branch = saleBranch,
+                copies = thermalPrinterManager.config.value.receiptCopies,
+                forcePreview = forcePreview
+            )
+            when (result) {
+                is PrintResult.Success -> _toastMessage.value = "🖨️ ${result.message}"
+                is PrintResult.Error -> _toastMessage.value = "⚠️ Printer: ${result.errorMessage}"
+            }
+        }
+    }
+
+    fun printThermalOrderTicket(
+        sale: SaleEntity,
+        items: List<SaleItemEntity>,
+        isTakeaway: Boolean = false,
+        forcePreview: Boolean = false
+    ) {
+        viewModelScope.launch {
+            val result = thermalPrinterManager.printOrderTicket(
+                sale = sale,
+                items = items,
+                isTakeaway = isTakeaway,
+                copies = thermalPrinterManager.config.value.orderCopies,
+                forcePreview = forcePreview
+            )
+            when (result) {
+                is PrintResult.Success -> _toastMessage.value = "👨‍🍳 ${result.message}"
+                is PrintResult.Error -> _toastMessage.value = "⚠️ Kitchen Printer: ${result.errorMessage}"
+            }
+        }
+    }
+
+    fun printThermalZReport(
+        summary: SalesReportSummary,
+        forcePreview: Boolean = false
+    ) {
+        viewModelScope.launch {
+            val user = _currentUser.value
+            val branch = _activeBranch.value
+            val result = thermalPrinterManager.printZReport(
+                summary = summary,
+                branch = branch,
+                managerName = "${user?.name ?: "Sarah Miller"} (${user?.role ?: "Manager"})",
+                khrRate = _khrExchangeRate.value,
+                forcePreview = forcePreview
+            )
+            when (result) {
+                is PrintResult.Success -> _toastMessage.value = "📊 ${result.message}"
+                is PrintResult.Error -> _toastMessage.value = "⚠️ Z-Report Printer: ${result.errorMessage}"
+            }
+        }
+    }
+
+    fun dismissThermalPreview() {
+        thermalPrinterManager.dismissPreview()
     }
 
     // Telegram Configuration & Testing Methods
@@ -1780,6 +1900,239 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             }
             val action = if (delta >= 0) "added" else "redeemed"
             _toastMessage.value = "${if (delta >= 0) "+$delta" else "$delta"} points $action for ${client.name}!"
+        }
+    }
+
+    // Authentication and Environment Helper Methods
+    fun applyEnvironmentVariables() {
+        val tgToken = com.example.BuildConfig.TELEGRAM_BOT_TOKEN
+        val tgChat = com.example.BuildConfig.TELEGRAM_CHAT_ID
+        val bkAccount = com.example.BuildConfig.BAKONG_ACCOUNT_ID
+        val bkMerchant = com.example.BuildConfig.BAKONG_MERCHANT_NAME
+        if (tgToken.isNotBlank() && tgChat.isNotBlank()) {
+            updateTelegramConfig(tgToken, tgChat, true)
+        }
+        if (bkAccount.isNotBlank()) {
+            updateBakongSettings(bkAccount, bkMerchant)
+        }
+        _toastMessage.value = "Synced environment configuration to active POS settings"
+    }
+
+    fun testTelegramConnection(token: String, chatId: String) {
+        viewModelScope.launch {
+            testTelegramNotification(token, chatId) { _, msg ->
+                _toastMessage.value = msg
+            }
+        }
+    }
+
+    fun signInUser(identifier: String, secret: String, onComplete: (UserEntity?) -> Unit) {
+        viewModelScope.launch {
+            val users = allUsers.value
+            val matched = users.firstOrNull { user ->
+                user.isActive && (
+                    user.pin == secret ||
+                    user.pin == identifier ||
+                    user.name.equals(identifier, ignoreCase = true) ||
+                    user.email.equals(identifier, ignoreCase = true)
+                )
+            }
+            if (matched != null) {
+                _currentUser.value = matched
+                _toastMessage.value = "Welcome back, ${matched.name}!"
+                logUserSwitchActivity(matched)
+                onComplete(matched)
+            } else {
+                onComplete(null)
+            }
+        }
+    }
+
+    fun signUpNewUser(
+        businessName: String = "TR Store & Cafe",
+        name: String,
+        email: String = "",
+        role: String = "CASHIER",
+        pin: String = "1234",
+        telegram: String = "",
+        onComplete: ((Boolean, String) -> Unit)? = null
+    ) {
+        if (name.isBlank()) {
+            onComplete?.invoke(false, "Name cannot be empty")
+            return
+        }
+        addUser(
+            name = name.trim(),
+            role = role.ifBlank { "CASHIER" },
+            pin = pin.ifBlank { "1234" },
+            email = email.trim(),
+            telegram = telegram.trim()
+        )
+        onComplete?.invoke(true, "Staff account created for ${name.trim()}")
+    }
+
+    fun changeUserPassword(
+        userId: Long,
+        oldPin: String,
+        newPin: String,
+        onResult: (Boolean, String) -> Unit
+    ) {
+        viewModelScope.launch {
+            val user = allUsers.value.firstOrNull { it.id == userId }
+            if (user == null) {
+                onResult(false, "User not found")
+                return@launch
+            }
+            if (oldPin.isNotBlank() && user.pin != oldPin.trim()) {
+                onResult(false, "Current password/PIN is incorrect")
+                return@launch
+            }
+            if (newPin.trim().length < 4) {
+                onResult(false, "New PIN must be at least 4 digits")
+                return@launch
+            }
+            val updated = user.copy(pin = newPin.trim())
+            repository.updateUser(updated)
+            if (_currentUser.value?.id == userId) {
+                _currentUser.value = updated
+            }
+            _toastMessage.value = "Password / PIN updated successfully for ${user.name}!"
+            onResult(true, "Password / PIN updated successfully!")
+        }
+    }
+
+    fun quickUpdateUserRole(userId: Long, newRole: String) {
+        viewModelScope.launch {
+            val user = allUsers.value.firstOrNull { it.id == userId }
+            if (user != null) {
+                val updated = user.copy(role = newRole.uppercase())
+                repository.updateUser(updated)
+                if (_currentUser.value?.id == userId) {
+                    _currentUser.value = updated
+                }
+                _toastMessage.value = "Role for '${user.name}' changed to ${newRole.uppercase()}"
+            }
+        }
+    }
+
+    fun addCustomAuditReport(title: String, notes: String, targetStaffName: String = "All Staff") {
+        viewModelScope.launch {
+            val admin = _currentUser.value
+            val log = ActivityLogEntity.createSecureLog(
+                staffId = admin?.id ?: 1L,
+                staffName = admin?.name ?: "Admin",
+                staffRole = admin?.role ?: "ADMIN",
+                category = ActivityCategory.SALES_AUDIT,
+                action = "ADMIN_CUSTOM_REPORT_CREATED",
+                entityType = "REPORT",
+                entityId = "REPORT-${System.currentTimeMillis()}",
+                details = "Admin created sales audit report: '$title' for $targetStaffName. Notes: $notes",
+                metadataJson = """{"title":"$title","target":"$targetStaffName","notes":"$notes"}"""
+            )
+            repository.logActivity(log)
+            _toastMessage.value = "Audit Report '$title' created and logged!"
+        }
+    }
+
+    fun addAdvertisement(
+        title: String,
+        khmerTitle: String,
+        description: String,
+        category: String,
+        badgeText: String,
+        price: Double,
+        imageUrl: String,
+        buttonText: String,
+        isRunning: Boolean = true
+    ) {
+        viewModelScope.launch {
+            val ad = AdvertisementEntity(
+                title = title.trim(),
+                khmerTitle = khmerTitle.trim(),
+                description = description.trim(),
+                category = category.trim(),
+                badgeText = badgeText.trim(),
+                price = price,
+                imageUrl = imageUrl.trim(),
+                buttonText = buttonText.trim(),
+                isRunning = isRunning
+            )
+            repository.insertAdvertisement(ad)
+            val admin = _currentUser.value
+            val log = ActivityLogEntity.createSecureLog(
+                staffId = admin?.id ?: 1L,
+                staffName = admin?.name ?: "Staff",
+                staffRole = admin?.role ?: "ADMIN",
+                category = ActivityCategory.STAFF_SECURITY,
+                action = "ADVERTISEMENT_CREATED",
+                entityType = "AD",
+                entityId = title,
+                details = "Created new running ad '$title' in category '$category' ($price)",
+                metadataJson = """{"title":"$title","price":$price,"category":"$category"}"""
+            )
+            repository.logActivity(log)
+            _toastMessage.value = "📢 Running ad '$title' created!"
+        }
+    }
+
+    fun updateAdvertisement(ad: AdvertisementEntity) {
+        viewModelScope.launch {
+            repository.updateAdvertisement(ad)
+            val admin = _currentUser.value
+            val log = ActivityLogEntity.createSecureLog(
+                staffId = admin?.id ?: 1L,
+                staffName = admin?.name ?: "Staff",
+                staffRole = admin?.role ?: "ADMIN",
+                category = ActivityCategory.STAFF_SECURITY,
+                action = "ADVERTISEMENT_UPDATED",
+                entityType = "AD",
+                entityId = "${ad.id}",
+                details = "Updated running ad '${ad.title}'",
+                metadataJson = """{"adId":${ad.id},"title":"${ad.title}"}"""
+            )
+            repository.logActivity(log)
+            _toastMessage.value = "📢 Ad '${ad.title}' updated!"
+        }
+    }
+
+    fun deleteAdvertisement(id: Long) {
+        viewModelScope.launch {
+            repository.deleteAdvertisementById(id)
+            _toastMessage.value = "Advertisement removed"
+        }
+    }
+
+    fun toggleAdRunning(id: Long, isRunning: Boolean) {
+        viewModelScope.launch {
+            repository.toggleAdRunning(id, isRunning)
+            _toastMessage.value = if (isRunning) "Ad is now RUNNING on display" else "Ad paused from running display"
+        }
+    }
+
+    fun bookOrOrderAdvertisement(ad: AdvertisementEntity) {
+        viewModelScope.launch {
+            val matchingProduct = allProducts.value.firstOrNull { 
+                it.name.equals(ad.title, ignoreCase = true) || it.name.contains(ad.title.take(8), ignoreCase = true)
+            }
+            if (matchingProduct != null) {
+                addToCart(matchingProduct)
+            } else {
+                val customProduct = ProductEntity(
+                    id = (System.currentTimeMillis() % 1000000) + 50000L,
+                    name = ad.title,
+                    sku = "AD-${ad.id}",
+                    category = ad.category,
+                    costPrice = ad.price * 0.4,
+                    sellingPrice = ad.price,
+                    stockQuantity = 999,
+                    minStockThreshold = 1,
+                    unit = if (ad.category.contains("Service", ignoreCase = true)) "session" else "item",
+                    barcode = "AD${ad.id}",
+                    imageUrl = ad.imageUrl
+                )
+                addToCart(customProduct)
+            }
+            _toastMessage.value = "🛒 Added '${ad.title}' ($${String.format(java.util.Locale.US, "%.2f", ad.price)}) to POS Cart!"
         }
     }
 }

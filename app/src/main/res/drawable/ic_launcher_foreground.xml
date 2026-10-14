@@ -6,4 +6,3 @@
         android:drawable="@drawable/img_tr_coffee_logo"
         android:gravity="center" />
 </layer-list>
-

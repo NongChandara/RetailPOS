@@ -1,6 +1,6 @@
 {
-  "name": "TR Store & Cafe",
-  "description": "Multi-category store for Cosmetics, Coffee, and Services with online ordering, appointment booking, and loyalty points tracking.",
+  "name": "TR Coffee POS",
+  "description": "Comprehensive Point of Sale (POS) system for TR Coffee with Khmer & USD dual currency, inventory tracking, Bakong KHQR, digital receipts, and sales analytics.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

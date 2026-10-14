@@ -22,6 +22,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AccountBalanceWallet
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Assessment
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.CreditCard
@@ -113,6 +114,7 @@ fun AdminSalesReportView(
 
     var showZReportDialog by remember { mutableStateOf(false) }
     var showAdminAuthDialog by remember { mutableStateOf(false) }
+    var showAddCustomReportDialog by remember { mutableStateOf(false) }
 
     // If active user is not admin, show Admin Security Gate
     if (!isCurrentUserAdmin) {
@@ -216,6 +218,19 @@ fun AdminSalesReportView(
                         }
 
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            // Add Custom Report Memo / Audit
+                            Button(
+                                onClick = { showAddCustomReportDialog = true },
+                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0F766E)),
+                                shape = RoundedCornerShape(8.dp),
+                                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp),
+                                modifier = Modifier.height(34.dp).testTag("btn_add_custom_report")
+                            ) {
+                                Icon(Icons.Filled.Add, contentDescription = null, modifier = Modifier.size(15.dp))
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text("+ Add Report", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                            }
+
                             // Share Report Button
                             Button(
                                 onClick = { viewModel.shareSalesReport(context, summary) },
@@ -833,6 +848,118 @@ fun AdminSalesReportView(
             viewModel = viewModel,
             onDismiss = { showZReportDialog = false }
         )
+    }
+
+    // Add Custom Audit Report Dialog
+    if (showAddCustomReportDialog) {
+        AddCustomAuditReportDialog(
+            allUsers = allUsers,
+            onDismiss = { showAddCustomReportDialog = false },
+            onSave = { title, notes, staffName ->
+                viewModel.addCustomAuditReport(title, notes, staffName)
+                showAddCustomReportDialog = false
+            }
+        )
+    }
+}
+
+@Composable
+fun AddCustomAuditReportDialog(
+    allUsers: List<com.example.data.model.UserEntity>,
+    onDismiss: () -> Unit,
+    onSave: (String, String, String) -> Unit
+) {
+    var title by remember { mutableStateOf("Sales Audit Memo") }
+    var notes by remember { mutableStateOf("") }
+    var selectedStaff by remember { mutableStateOf("All Staff") }
+
+    androidx.compose.ui.window.Dialog(onDismissRequest = onDismiss) {
+        Surface(
+            shape = RoundedCornerShape(16.dp),
+            color = Color.White,
+            modifier = Modifier.fillMaxWidth().padding(8.dp)
+        ) {
+            Column(
+                modifier = Modifier.padding(20.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Text(
+                    text = "Add Custom Audit Report",
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 17.sp,
+                    color = RetailSlate900
+                )
+                Text(
+                    text = "Record an executive audit note, staff performance assessment, or custom shift review.",
+                    fontSize = 12.sp,
+                    color = RetailSlate500
+                )
+
+                OutlinedTextField(
+                    value = title,
+                    onValueChange = { title = it },
+                    label = { Text("Report Title / Subject") },
+                    singleLine = true,
+                    shape = RoundedCornerShape(8.dp),
+                    modifier = Modifier.fillMaxWidth().testTag("custom_report_title")
+                )
+
+                Text("Target Staff Member", fontSize = 12.sp, color = RetailSlate500, fontWeight = FontWeight.SemiBold)
+                LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    item {
+                        FilterChip(
+                            selected = selectedStaff == "All Staff",
+                            onClick = { selectedStaff = "All Staff" },
+                            label = { Text("All Staff", fontSize = 11.sp) },
+                            shape = RoundedCornerShape(12.dp)
+                        )
+                    }
+                    items(allUsers) { user ->
+                        FilterChip(
+                            selected = selectedStaff == user.name,
+                            onClick = { selectedStaff = user.name },
+                            label = { Text("${user.name} (${user.role})", fontSize = 11.sp) },
+                            shape = RoundedCornerShape(12.dp)
+                        )
+                    }
+                }
+
+                OutlinedTextField(
+                    value = notes,
+                    onValueChange = { notes = it },
+                    label = { Text("Audit Findings & Memo Notes") },
+                    minLines = 3,
+                    shape = RoundedCornerShape(8.dp),
+                    modifier = Modifier.fillMaxWidth().testTag("custom_report_notes")
+                )
+
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                    horizontalArrangement = Arrangement.End
+                ) {
+                    OutlinedButton(
+                        onClick = onDismiss,
+                        shape = RoundedCornerShape(8.dp),
+                        modifier = Modifier.padding(end = 8.dp)
+                    ) {
+                        Text("Cancel")
+                    }
+
+                    Button(
+                        onClick = {
+                            if (title.isNotBlank()) {
+                                onSave(title.trim(), notes.trim(), selectedStaff)
+                            }
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = RetailTealPrimary),
+                        shape = RoundedCornerShape(8.dp),
+                        modifier = Modifier.testTag("save_custom_report_btn")
+                    ) {
+                        Text("Save & Log Report", fontWeight = FontWeight.Bold)
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -1541,7 +1668,40 @@ private fun ZReportModalDialog(
                     }
                 }
 
-                Spacer(modifier = Modifier.height(16.dp))
+                Spacer(modifier = Modifier.height(14.dp))
+
+                // Thermal Printer Actions Row
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Button(
+                        onClick = {
+                            viewModel.printThermalZReport(summary, forcePreview = false)
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = RetailTealPrimary),
+                        shape = RoundedCornerShape(10.dp),
+                        modifier = Modifier.weight(1.3f).testTag("btn_print_thermal_z_report")
+                    ) {
+                        Icon(Icons.Filled.Print, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text("Print Thermal Z-Report", fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                    }
+
+                    OutlinedButton(
+                        onClick = {
+                            viewModel.printThermalZReport(summary, forcePreview = true)
+                        },
+                        shape = RoundedCornerShape(10.dp),
+                        modifier = Modifier.weight(1f).testTag("btn_preview_thermal_z_report")
+                    ) {
+                        Icon(Icons.Filled.Assessment, contentDescription = null, modifier = Modifier.size(15.dp))
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("Preview Roll", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(10.dp))
 
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -1557,7 +1717,7 @@ private fun ZReportModalDialog(
 
                     Button(
                         onClick = { viewModel.shareSalesReport(context, summary) },
-                        colors = ButtonDefaults.buttonColors(containerColor = RetailTealPrimary),
+                        colors = ButtonDefaults.buttonColors(containerColor = RetailSlate900),
                         shape = RoundedCornerShape(10.dp),
                         modifier = Modifier.weight(1f)
                     ) {

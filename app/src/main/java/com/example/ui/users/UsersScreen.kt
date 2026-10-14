@@ -29,11 +29,16 @@ import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.LockReset
 import androidx.compose.material.icons.filled.People
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.PersonAdd
+import androidx.compose.material.icons.filled.PostAdd
 import androidx.compose.material.icons.filled.Send
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.SwapHoriz
+import com.example.ui.components.ChangePasswordDialog
+import com.example.ui.reports.AddCustomAuditReportDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -85,7 +90,8 @@ import com.example.ui.theme.RetailTealPrimary
 
 enum class UsersSubTab {
     STAFF_DIRECTORY,
-    SALES_REPORT
+    SALES_REPORT,
+    ENV_CONFIG
 }
 
 @Composable
@@ -104,9 +110,12 @@ fun UsersScreen(
     val isCurrentUserAdmin = currentUser?.role?.equals("ADMIN", ignoreCase = true) == true
     var selectedSubTab by remember { mutableStateOf(UsersSubTab.STAFF_DIRECTORY) }
     var showEditAdminTgDialog by remember { mutableStateOf(false) }
+    var userToChangePassword by remember { mutableStateOf<UserEntity?>(null) }
+    var showChangeMyPasswordDialog by remember { mutableStateOf(false) }
+    var showAddCustomReportDialog by remember { mutableStateOf(false) }
 
-    // Ensure non-admin users always stay on STAFF_DIRECTORY
-    if (!isCurrentUserAdmin && selectedSubTab != UsersSubTab.STAFF_DIRECTORY) {
+    // Ensure non-admin users cannot access SALES_REPORT
+    if (!isCurrentUserAdmin && selectedSubTab == UsersSubTab.SALES_REPORT) {
         selectedSubTab = UsersSubTab.STAFF_DIRECTORY
     }
 
@@ -340,10 +349,41 @@ fun UsersScreen(
                                 )
                                 Spacer(modifier = Modifier.width(4.dp))
                                 Text(
-                                    text = "Sales Reports",
+                                    text = "Reports",
                                     fontSize = 11.sp,
                                     fontWeight = if (selectedSubTab == UsersSubTab.SALES_REPORT) FontWeight.Bold else FontWeight.Medium,
                                     color = if (selectedSubTab == UsersSubTab.SALES_REPORT) RetailSlate900 else RetailSlate500
+                                )
+                            }
+                        }
+
+                        // Environment & Config Tab
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .clip(RoundedCornerShape(9.dp))
+                                .background(if (selectedSubTab == UsersSubTab.ENV_CONFIG) Color.White else Color.Transparent)
+                                .clickable { selectedSubTab = UsersSubTab.ENV_CONFIG }
+                                .padding(vertical = 8.dp)
+                                .testTag("tab_admin_env_config"),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.Center
+                            ) {
+                                Icon(
+                                    Icons.Filled.Settings,
+                                    contentDescription = null,
+                                    tint = if (selectedSubTab == UsersSubTab.ENV_CONFIG) RetailTealPrimary else RetailSlate500,
+                                    modifier = Modifier.size(15.dp)
+                                )
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text(
+                                    text = "Env / Config",
+                                    fontSize = 11.sp,
+                                    fontWeight = if (selectedSubTab == UsersSubTab.ENV_CONFIG) FontWeight.Bold else FontWeight.Medium,
+                                    color = if (selectedSubTab == UsersSubTab.ENV_CONFIG) RetailSlate900 else RetailSlate500
                                 )
                             }
                         }
@@ -373,19 +413,53 @@ fun UsersScreen(
                             )
                         }
 
-                        if (isCurrentUserAdmin) {
-                            Button(
-                                onClick = { showAddUserDialog = true },
-                                colors = ButtonDefaults.buttonColors(containerColor = RetailTealPrimary),
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            OutlinedButton(
+                                onClick = { showChangeMyPasswordDialog = true },
                                 shape = RoundedCornerShape(8.dp),
                                 contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp),
                                 modifier = Modifier
                                     .height(34.dp)
-                                    .testTag("menu_create_user_btn")
+                                    .testTag("change_pin_btn")
                             ) {
-                                Icon(Icons.Filled.PersonAdd, contentDescription = null, modifier = Modifier.size(15.dp))
+                                Icon(Icons.Filled.LockReset, contentDescription = null, modifier = Modifier.size(15.dp))
                                 Spacer(modifier = Modifier.width(4.dp))
-                                Text("+ Create User", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                Text("Change PIN", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                            }
+
+                            if (isCurrentUserAdmin) {
+                                Button(
+                                    onClick = { showAddUserDialog = true },
+                                    colors = ButtonDefaults.buttonColors(containerColor = RetailTealPrimary),
+                                    shape = RoundedCornerShape(8.dp),
+                                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp),
+                                    modifier = Modifier
+                                        .height(34.dp)
+                                        .testTag("menu_create_user_btn")
+                                ) {
+                                    Icon(Icons.Filled.PersonAdd, contentDescription = null, modifier = Modifier.size(15.dp))
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text("+ Create User", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                }
+
+                                Spacer(modifier = Modifier.width(6.dp))
+
+                                Button(
+                                    onClick = { showAddCustomReportDialog = true },
+                                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0284C7)),
+                                    shape = RoundedCornerShape(8.dp),
+                                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp),
+                                    modifier = Modifier
+                                        .height(34.dp)
+                                        .testTag("admin_add_report_btn")
+                                ) {
+                                    Icon(Icons.Filled.PostAdd, contentDescription = null, modifier = Modifier.size(15.dp))
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text("+ Add Report", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                }
                             }
                         }
                     }
@@ -409,9 +483,16 @@ fun UsersScreen(
                                         showPinSwitchDialog = true
                                     }
                                 },
-                                onViewReport = if (isCurrentUserAdmin && user.role.equals("ADMIN", ignoreCase = true)) {
-                                    { selectedSubTab = UsersSubTab.SALES_REPORT }
+                                onViewReport = if (isCurrentUserAdmin) {
+                                    {
+                                        viewModel.setReportCashierFilter(user.name)
+                                        selectedSubTab = UsersSubTab.SALES_REPORT
+                                    }
                                 } else null,
+                                onChangeRole = if (isCurrentUserAdmin) {
+                                    { newRole -> viewModel.quickUpdateUserRole(user.id, newRole) }
+                                } else null,
+                                onChangePassword = { userToChangePassword = user },
                                 onEdit = { userToEdit = user },
                                 onDelete = { userToDelete = user }
                             )
@@ -426,6 +507,13 @@ fun UsersScreen(
                             modifier = Modifier.weight(1f)
                         )
                     }
+                }
+
+                UsersSubTab.ENV_CONFIG -> {
+                    EnvironmentConfigView(
+                        viewModel = viewModel,
+                        modifier = Modifier.weight(1f)
+                    )
                 }
             }
         }
@@ -536,6 +624,39 @@ fun UsersScreen(
         )
     }
 
+    // Change Password Dialogs
+    userToChangePassword?.let { targetUser ->
+        ChangePasswordDialog(
+            user = targetUser,
+            onDismiss = { userToChangePassword = null },
+            onSubmitNewPassword = { oldPin, newPin, onComplete ->
+                viewModel.changeUserPassword(targetUser.id, oldPin, newPin) { success, msg ->
+                    onComplete(success, msg)
+                    if (success) {
+                        userToChangePassword = null
+                    }
+                }
+            }
+        )
+    }
+
+    if (showChangeMyPasswordDialog) {
+        currentUser?.let { user ->
+            ChangePasswordDialog(
+                user = user,
+                onDismiss = { showChangeMyPasswordDialog = false },
+                onSubmitNewPassword = { oldPin, newPin, onComplete ->
+                    viewModel.changeUserPassword(user.id, oldPin, newPin) { success, msg ->
+                        onComplete(success, msg)
+                        if (success) {
+                            showChangeMyPasswordDialog = false
+                        }
+                    }
+                }
+            )
+        }
+    }
+
     // Quick Edit Admin Telegram Dialog
     if (showEditAdminTgDialog) {
         currentUser?.let { user ->
@@ -551,6 +672,17 @@ fun UsersScreen(
             )
         }
     }
+
+    if (showAddCustomReportDialog) {
+        AddCustomAuditReportDialog(
+            allUsers = users,
+            onDismiss = { showAddCustomReportDialog = false },
+            onSave = { title, notes, staffName ->
+                viewModel.addCustomAuditReport(title, notes, staffName)
+                showAddCustomReportDialog = false
+            }
+        )
+    }
 }
 
 @Composable
@@ -560,6 +692,8 @@ fun UserRowCard(
     isAdmin: Boolean = false,
     onSelect: () -> Unit,
     onViewReport: (() -> Unit)? = null,
+    onChangeRole: ((String) -> Unit)? = null,
+    onChangePassword: () -> Unit,
     onEdit: () -> Unit,
     onDelete: () -> Unit
 ) {
@@ -624,6 +758,31 @@ fun UserRowCard(
                     Spacer(modifier = Modifier.height(3.dp))
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         RoleBadge(role = user.role)
+                        if (isAdmin && onChangeRole != null && !isCurrent) {
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Surface(
+                                color = Color(0xFFCCFBF1),
+                                shape = RoundedCornerShape(6.dp),
+                                modifier = Modifier
+                                    .clickable {
+                                        val nextRole = when (user.role.uppercase()) {
+                                            "CASHIER" -> "ADMIN"
+                                            "ADMIN" -> "CLERK"
+                                            else -> "CASHIER"
+                                        }
+                                        onChangeRole(nextRole)
+                                    }
+                                    .testTag("quick_change_role_${user.id}")
+                            ) {
+                                Text(
+                                    text = "Role ↻",
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = RetailTealPrimary,
+                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                )
+                            }
+                        }
                         Spacer(modifier = Modifier.width(8.dp))
                         Icon(
                             Icons.Filled.Lock,
@@ -676,7 +835,7 @@ fun UserRowCard(
             }
 
             Row(verticalAlignment = Alignment.CenterVertically) {
-                if (user.role.equals("ADMIN", ignoreCase = true) && onViewReport != null) {
+                if (isAdmin && onViewReport != null) {
                     Surface(
                         color = RetailTealPrimary.copy(alpha = 0.12f),
                         shape = RoundedCornerShape(8.dp),
@@ -699,6 +858,19 @@ fun UserRowCard(
                             Text("Report", color = RetailTealPrimary, fontSize = 11.sp, fontWeight = FontWeight.Bold)
                         }
                     }
+                }
+
+                // Password / PIN reset button
+                IconButton(
+                    onClick = onChangePassword,
+                    modifier = Modifier.testTag("user_change_pin_btn_${user.id}")
+                ) {
+                    Icon(
+                        Icons.Filled.LockReset,
+                        contentDescription = "Change Password",
+                        tint = RetailSlate700,
+                        modifier = Modifier.size(18.dp)
+                    )
                 }
 
                 if (isAdmin) {
@@ -862,7 +1034,7 @@ fun AddEditUserDialog(
         )
     }
 
-    val roles = listOf("ADMIN", "CASHIER", "CLERK")
+    val roles = if (user == null) listOf("CASHIER") else listOf("ADMIN", "CASHIER", "CLERK")
 
     Dialog(onDismissRequest = onDismiss) {
         Surface(
@@ -941,7 +1113,35 @@ fun AddEditUserDialog(
                     modifier = Modifier.fillMaxWidth().testTag("user_pin_field")
                 )
 
-                Text("Assigned Role", fontSize = 12.sp, color = RetailSlate500, fontWeight = FontWeight.SemiBold)
+                if (user == null) {
+                    Surface(
+                        color = Color(0xFFF0FDF4),
+                        shape = RoundedCornerShape(8.dp),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF86EFAC)),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(10.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                Icons.Filled.Lock,
+                                contentDescription = null,
+                                tint = Color(0xFF16A34A),
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = "New accounts are strictly created with CASHIER role (Access to POS & Product Menu only). Admin can change role later.",
+                                fontSize = 11.sp,
+                                color = Color(0xFF166534),
+                                fontWeight = FontWeight.Medium
+                            )
+                        }
+                    }
+                } else {
+                    Text("Assigned Role", fontSize = 12.sp, color = RetailSlate500, fontWeight = FontWeight.SemiBold)
+                }
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(8.dp)

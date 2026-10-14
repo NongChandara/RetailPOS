@@ -7,6 +7,7 @@ import androidx.room.RoomDatabase
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 import com.example.data.dao.ActivityLogDao
+import com.example.data.dao.AdvertisementDao
 import com.example.data.dao.BranchDao
 import com.example.data.dao.CategoryDao
 import com.example.data.dao.ClientDao
@@ -16,6 +17,7 @@ import com.example.data.dao.StockMovementDao
 import com.example.data.dao.UserDao
 import com.example.data.model.ActivityCategory
 import com.example.data.model.ActivityLogEntity
+import com.example.data.model.AdvertisementEntity
 import com.example.data.model.BranchEntity
 import com.example.data.model.CategoryEntity
 import com.example.data.model.ClientEntity
@@ -38,9 +40,10 @@ import kotlinx.coroutines.launch
         ActivityLogEntity::class,
         CategoryEntity::class,
         BranchEntity::class,
-        ClientEntity::class
+        ClientEntity::class,
+        AdvertisementEntity::class
     ],
-    version = 9,
+    version = 10,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -52,6 +55,7 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun categoryDao(): CategoryDao
     abstract fun branchDao(): BranchDao
     abstract fun clientDao(): ClientDao
+    abstract fun advertisementDao(): AdvertisementDao
 
     companion object {
         @Volatile
@@ -507,6 +511,50 @@ abstract class AppDatabase : RoomDatabase() {
                     )
                 )
                 clientDao.insertClients(seedClients)
+            }
+
+            // Seed Advertisements (Featured & Running Promos)
+            val adDao = database.advertisementDao()
+            if (adDao.getCount() == 0) {
+                val seedAds = listOf(
+                    AdvertisementEntity(
+                        title = "Hydra-Glow Signature Facial",
+                        khmerTitle = "សេវាកម្មព្យាបាល និងថែទាំស្បែកមុខ 60 នាទី",
+                        description = "Deep skin cleansing, ultrasound infusion & botanical calming mask.",
+                        category = "Service",
+                        badgeText = "VIP Booking 👑",
+                        price = 35.00,
+                        imageUrl = "https://images.unsplash.com/photo-1570172619644-dfd03ed5d881?auto=format&fit=crop&w=800&q=80",
+                        buttonText = "Book an Appointment →",
+                        isRunning = true,
+                        displayOrder = 0
+                    ),
+                    AdvertisementEntity(
+                        title = "Korean Glass Skin Facial & Serum",
+                        khmerTitle = "ឈុតថែរក្សាស្បែកមុខ និងសេរ៉ូមប្រឆាំងស្នាមជ្រីវជ្រួញ",
+                        description = "Hydrating botanical collagen mask + Vitamin C glow infusion.",
+                        category = "Cosmetics",
+                        badgeText = "Special Promo 🔥",
+                        price = 28.00,
+                        imageUrl = "https://images.unsplash.com/photo-1556228720-195a672e8a03?auto=format&fit=crop&w=800&q=80",
+                        buttonText = "Order Service ($28.00) →",
+                        isRunning = true,
+                        displayOrder = 1
+                    ),
+                    AdvertisementEntity(
+                        title = "Signature Iced TR Special Roast",
+                        khmerTitle = "កាហ្វេទឹកដោះគោពិសេស រសជាតិឈ្ងុយឆ្ងាញ់",
+                        description = "Rich espresso blended with organic milk & palm caramel.",
+                        category = "Coffee",
+                        badgeText = "Best Seller ☕",
+                        price = 2.50,
+                        imageUrl = "https://images.unsplash.com/photo-1517701604599-bb29b565090c?auto=format&fit=crop&w=800&q=80",
+                        buttonText = "Order Now ($2.50) →",
+                        isRunning = true,
+                        displayOrder = 2
+                    )
+                )
+                seedAds.forEach { adDao.insertAdvertisement(it) }
             }
         }
 

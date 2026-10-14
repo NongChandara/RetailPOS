@@ -54,12 +54,24 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.material.icons.filled.PhoneAndroid
+import androidx.compose.material.icons.filled.Restaurant
+import androidx.compose.material.icons.filled.Tune
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import com.example.printer.FormattedThermalDoc
+import com.example.printer.PrintResult
+import com.example.printer.PrinterConnectionType
+import com.example.printer.ThermalPrinterManager
+import com.example.ui.components.ThermalPrinterSettingsDialog
+import com.example.ui.components.ThermalReceiptPreviewDialog
+import kotlinx.coroutines.launch
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -108,13 +120,23 @@ fun DigitalReceiptScreen(
     khrRate: Double = CurrencyUtils.activeKhrExchangeRate,
     branch: com.example.data.model.BranchEntity? = null,
     onEditReceipt: (() -> Unit)? = null,
+    onPrintThermalReceipt: (() -> Unit)? = null,
+    onPrintKitchenOrder: (() -> Unit)? = null,
+    onPreviewThermalSlip: (() -> Unit)? = null,
     onDismiss: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
+    val coroutineScope = rememberCoroutineScope()
+    val printerManager = remember { ThermalPrinterManager.getInstance(context) }
+    val printerConfig by printerManager.config.collectAsState()
+    val isThermalPrinting by printerManager.isPrinting.collectAsState()
+
     var selectedCurrencyMode by remember { mutableStateOf(CurrencyMode.DUAL) }
     var pdfFile by remember { mutableStateOf<File?>(null) }
     var isGeneratingPdf by remember { mutableStateOf(false) }
+    var showThermalSettingsDialog by remember { mutableStateOf(false) }
+    var activePreviewDoc by remember { mutableStateOf<FormattedThermalDoc?>(null) }
 
     // Generate PDF receipt on launch
     LaunchedEffect(sale.id, khrRate, branch?.id, branch?.taxPercent, branch?.receiptHeader) {
@@ -168,6 +190,32 @@ fun DigitalReceiptScreen(
                     }
                 },
                 actions = {
+                    // Quick Thermal Print
+                    IconButton(
+                        onClick = {
+                            if (onPrintThermalReceipt != null) {
+                                onPrintThermalReceipt()
+                            } else {
+                                coroutineScope.launch {
+                                    val res = printerManager.printCustomerReceipt(sale, items, khrRate, branch)
+                                    when (res) {
+                                        is PrintResult.Success -> Toast.makeText(context, "🖨️ ${res.message}", Toast.LENGTH_SHORT).show()
+                                        is PrintResult.Error -> Toast.makeText(context, "⚠️ ${res.errorMessage}", Toast.LENGTH_LONG).show()
+                                    }
+                                }
+                            }
+                        },
+                        modifier = Modifier.testTag("topbar_thermal_print_button")
+                    ) {
+                        Icon(Icons.Filled.Print, contentDescription = "Thermal Print", tint = RetailTealPrimary)
+                    }
+                    // Printer Setup
+                    IconButton(
+                        onClick = { showThermalSettingsDialog = true },
+                        modifier = Modifier.testTag("topbar_printer_settings_button")
+                    ) {
+                        Icon(Icons.Filled.Tune, contentDescription = "Printer Settings", tint = RetailSlate700)
+                    }
                     // Quick Share PDF
                     IconButton(
                         onClick = {
@@ -176,17 +224,7 @@ fun DigitalReceiptScreen(
                         },
                         modifier = Modifier.testTag("topbar_share_receipt_button")
                     ) {
-                        Icon(Icons.Filled.Share, contentDescription = "Share PDF", tint = RetailTealPrimary)
-                    }
-                    // Quick Print
-                    IconButton(
-                        onClick = {
-                            val file = pdfFile ?: PdfReceiptGenerator.generateReceiptPdf(context, sale, items, khrRate).also { pdfFile = it }
-                            PdfReceiptGenerator.printReceiptPdf(context, file, sale.receiptNumber)
-                        },
-                        modifier = Modifier.testTag("topbar_print_receipt_button")
-                    ) {
-                        Icon(Icons.Filled.Print, contentDescription = "Print", tint = RetailSlate700)
+                        Icon(Icons.Filled.Share, contentDescription = "Share PDF", tint = RetailSlate700)
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.White)
@@ -202,11 +240,38 @@ fun DigitalReceiptScreen(
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 12.dp),
-                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                        .padding(horizontal = 14.dp, vertical = 10.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    // Secondary Action: Print Receipt
+                    // Primary Action: Print Thermal Receipt
+                    Button(
+                        onClick = {
+                            if (onPrintThermalReceipt != null) {
+                                onPrintThermalReceipt()
+                            } else {
+                                coroutineScope.launch {
+                                    val res = printerManager.printCustomerReceipt(sale, items, khrRate, branch)
+                                    when (res) {
+                                        is PrintResult.Success -> Toast.makeText(context, "🖨️ ${res.message}", Toast.LENGTH_SHORT).show()
+                                        is PrintResult.Error -> Toast.makeText(context, "⚠️ ${res.errorMessage}", Toast.LENGTH_LONG).show()
+                                    }
+                                }
+                            }
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = RetailTealPrimary),
+                        shape = RoundedCornerShape(10.dp),
+                        modifier = Modifier
+                            .weight(1.3f)
+                            .height(48.dp)
+                            .testTag("bottombar_thermal_print_button")
+                    ) {
+                        Icon(Icons.Filled.Print, contentDescription = "Print Thermal", modifier = Modifier.size(17.dp))
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text("Print Thermal", fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                    }
+
+                    // Secondary Action: PDF Print
                     OutlinedButton(
                         onClick = {
                             val file = pdfFile ?: PdfReceiptGenerator.generateReceiptPdf(context, sale, items, khrRate).also { pdfFile = it }
@@ -214,28 +279,28 @@ fun DigitalReceiptScreen(
                         },
                         shape = RoundedCornerShape(10.dp),
                         modifier = Modifier
-                            .weight(1.3f)
+                            .weight(0.9f)
                             .height(48.dp)
                             .testTag("print_receipt_button")
                     ) {
-                        Icon(Icons.Filled.Print, contentDescription = "Print Receipt", modifier = Modifier.size(18.dp))
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text("Print Receipt", fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                        Icon(Icons.Filled.PictureAsPdf, contentDescription = "PDF Print", modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("PDF", fontWeight = FontWeight.Bold, fontSize = 13.sp)
                     }
 
-                    // Primary Action: New Sale / Done
+                    // Done / New Sale
                     Button(
                         onClick = onDismiss,
-                        colors = ButtonDefaults.buttonColors(containerColor = RetailTealPrimary),
+                        colors = ButtonDefaults.buttonColors(containerColor = RetailSlate900),
                         shape = RoundedCornerShape(10.dp),
                         modifier = Modifier
-                            .weight(2f)
+                            .weight(1.1f)
                             .height(48.dp)
                             .testTag("receipt_done_button")
                     ) {
-                        Icon(Icons.Filled.Check, contentDescription = "Done", modifier = Modifier.size(20.dp))
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text("New Sale / Done", fontSize = 15.sp, fontWeight = FontWeight.Bold)
+                        Icon(Icons.Filled.Check, contentDescription = "Done", modifier = Modifier.size(18.dp))
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("Done", fontSize = 14.sp, fontWeight = FontWeight.Bold)
                     }
                 }
             }
@@ -499,7 +564,145 @@ fun DigitalReceiptScreen(
                 }
             }
 
-            // 4. Authentic Digital Thermal Receipt Card
+            // 4. Dedicated ESC/POS Thermal Receipt Printing Station
+            Surface(
+                color = Color(0xFFF8FAFC),
+                border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFCBD5E1)),
+                shape = RoundedCornerShape(14.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("thermal_printing_station_card")
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(14.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Box(
+                                modifier = Modifier
+                                    .size(34.dp)
+                                    .clip(CircleShape)
+                                    .background(RetailTealPrimary.copy(alpha = 0.15f)),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    Icons.Filled.Print,
+                                    contentDescription = null,
+                                    tint = RetailTealPrimary,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                            }
+                            Spacer(modifier = Modifier.width(10.dp))
+                            Column {
+                                Text(
+                                    text = "ESC/POS Thermal Printing Station",
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 13.sp,
+                                    color = RetailSlate900
+                                )
+                                Text(
+                                    text = "${printerConfig.paperWidth.mm}mm Paper • ${printerConfig.connectionType.displayName}",
+                                    fontSize = 11.sp,
+                                    color = RetailSlate500
+                                )
+                            }
+                        }
+
+                        // Printer Settings Button
+                        OutlinedButton(
+                            onClick = { showThermalSettingsDialog = true },
+                            shape = RoundedCornerShape(8.dp),
+                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+                            modifier = Modifier.height(30.dp).testTag("receipt_printer_config_btn")
+                        ) {
+                            Icon(Icons.Filled.Tune, contentDescription = null, modifier = Modifier.size(13.dp))
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("Setup", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                        }
+                    }
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        // Print Customer Thermal Slip
+                        Button(
+                            onClick = {
+                                if (onPrintThermalReceipt != null) {
+                                    onPrintThermalReceipt()
+                                } else {
+                                    coroutineScope.launch {
+                                        val res = printerManager.printCustomerReceipt(sale, items, khrRate, branch)
+                                        when (res) {
+                                            is PrintResult.Success -> Toast.makeText(context, "🖨️ ${res.message}", Toast.LENGTH_SHORT).show()
+                                            is PrintResult.Error -> Toast.makeText(context, "⚠️ ${res.errorMessage}", Toast.LENGTH_LONG).show()
+                                        }
+                                    }
+                                }
+                            },
+                            colors = ButtonDefaults.buttonColors(containerColor = RetailTealPrimary),
+                            shape = RoundedCornerShape(8.dp),
+                            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp),
+                            modifier = Modifier.weight(1f).height(36.dp).testTag("btn_print_thermal_slip")
+                        ) {
+                            Icon(Icons.Filled.Print, contentDescription = null, modifier = Modifier.size(14.dp))
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("Print Receipt", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                        }
+
+                        // Print Kitchen / Barista Ticket
+                        OutlinedButton(
+                            onClick = {
+                                if (onPrintKitchenOrder != null) {
+                                    onPrintKitchenOrder()
+                                } else {
+                                    coroutineScope.launch {
+                                        val res = printerManager.printOrderTicket(sale, items)
+                                        when (res) {
+                                            is PrintResult.Success -> Toast.makeText(context, "👨‍🍳 ${res.message}", Toast.LENGTH_SHORT).show()
+                                            is PrintResult.Error -> Toast.makeText(context, "⚠️ ${res.errorMessage}", Toast.LENGTH_LONG).show()
+                                        }
+                                    }
+                                }
+                            },
+                            shape = RoundedCornerShape(8.dp),
+                            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp),
+                            modifier = Modifier.weight(1f).height(36.dp).testTag("btn_print_kitchen_ticket")
+                        ) {
+                            Icon(Icons.Filled.Restaurant, contentDescription = null, modifier = Modifier.size(14.dp))
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("Kitchen Ticket", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                        }
+
+                        // On-Screen Thermal Paper Preview
+                        OutlinedButton(
+                            onClick = {
+                                if (onPreviewThermalSlip != null) {
+                                    onPreviewThermalSlip()
+                                } else {
+                                    activePreviewDoc = com.example.printer.ThermalReceiptFormatter.formatCustomerReceipt(sale, items, khrRate, branch, printerConfig)
+                                }
+                            },
+                            shape = RoundedCornerShape(8.dp),
+                            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp),
+                            modifier = Modifier.weight(1f).height(36.dp).testTag("btn_preview_thermal_slip")
+                        ) {
+                            Icon(Icons.Filled.PhoneAndroid, contentDescription = null, modifier = Modifier.size(14.dp))
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("Preview Roll", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                        }
+                    }
+                }
+            }
+
+            // 5. Authentic Digital Thermal Receipt Card
             val rHeader = branch?.receiptHeader ?: "TR COFFEE • ${sale.branchName}"
             val rSubtitle = branch?.receiptSubtitle ?: "Official Sales Receipt & Tax Invoice"
             val rAddress = branch?.address?.ifBlank { null } ?: "123 Norodom Blvd • Daun Penh, Phnom Penh"
@@ -978,5 +1181,22 @@ fun DigitalReceiptScreen(
 
             Spacer(modifier = Modifier.height(10.dp))
         }
+    }
+
+    // Thermal Printer Settings Modal
+    if (showThermalSettingsDialog) {
+        ThermalPrinterSettingsDialog(onDismiss = { showThermalSettingsDialog = false })
+    }
+
+    // Thermal Receipt / Kitchen Ticket On-Screen Simulator
+    activePreviewDoc?.let { doc ->
+        ThermalReceiptPreviewDialog(
+            doc = doc,
+            onDismiss = { activePreviewDoc = null },
+            onOpenSettings = {
+                activePreviewDoc = null
+                showThermalSettingsDialog = true
+            }
+        )
     }
 }

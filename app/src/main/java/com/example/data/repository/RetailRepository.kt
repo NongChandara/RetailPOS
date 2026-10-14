@@ -4,6 +4,7 @@ import androidx.room.withTransaction
 import com.example.data.AppDatabase
 import com.example.data.model.ActivityCategory
 import com.example.data.model.ActivityLogEntity
+import com.example.data.model.AdvertisementEntity
 import com.example.data.model.BranchEntity
 import com.example.data.model.CategoryEntity
 import com.example.data.model.ClientEntity
@@ -25,6 +26,7 @@ class RetailRepository(private val database: AppDatabase) {
     private val categoryDao = database.categoryDao()
     private val branchDao = database.branchDao()
     private val clientDao = database.clientDao()
+    private val advertisementDao = database.advertisementDao()
 
     val allProducts: Flow<List<ProductEntity>> = productDao.getAllProducts()
     val lowStockProducts: Flow<List<ProductEntity>> = productDao.getLowStockProducts()
@@ -37,6 +39,8 @@ class RetailRepository(private val database: AppDatabase) {
     val allMovements: Flow<List<StockMovementEntity>> = stockMovementDao.getAllMovements()
     val allUsers: Flow<List<UserEntity>> = userDao.getAllUsers()
     val allLogs: Flow<List<ActivityLogEntity>> = activityLogDao.getAllLogs()
+    val allAdvertisements: Flow<List<AdvertisementEntity>> = advertisementDao.getAllAdvertisements()
+    val runningAdvertisements: Flow<List<AdvertisementEntity>> = advertisementDao.getRunningAdvertisements()
 
     fun getLogsByStaff(staffId: Long): Flow<List<ActivityLogEntity>> = activityLogDao.getLogsByStaff(staffId)
     fun getLogsByCategory(category: String): Flow<List<ActivityLogEntity>> = activityLogDao.getLogsByCategory(category)
@@ -424,5 +428,25 @@ class RetailRepository(private val database: AppDatabase) {
             metadataJson = """{"clientId":${client.id},"delta":$delta,"newPoints":$newPoints,"reason":"$reason"}"""
         )
         activityLogDao.insertLog(auditLog)
+    }
+
+    suspend fun insertAdvertisement(ad: AdvertisementEntity): Long = withContext(Dispatchers.IO) {
+        advertisementDao.insertAdvertisement(ad)
+    }
+
+    suspend fun updateAdvertisement(ad: AdvertisementEntity): Unit = withContext(Dispatchers.IO) {
+        advertisementDao.updateAdvertisement(ad)
+    }
+
+    suspend fun deleteAdvertisement(ad: AdvertisementEntity): Unit = withContext(Dispatchers.IO) {
+        advertisementDao.deleteAdvertisement(ad)
+    }
+
+    suspend fun deleteAdvertisementById(id: Long): Unit = withContext(Dispatchers.IO) {
+        advertisementDao.deleteById(id)
+    }
+
+    suspend fun toggleAdRunning(id: Long, isRunning: Boolean): Unit = withContext(Dispatchers.IO) {
+        advertisementDao.toggleRunning(id, isRunning)
     }
 }

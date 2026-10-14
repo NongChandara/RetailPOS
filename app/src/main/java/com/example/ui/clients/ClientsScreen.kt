@@ -917,14 +917,56 @@ fun ClientFormDialog(
                 }
 
                 item {
-                    OutlinedTextField(
-                        value = address,
-                        onValueChange = { address = it },
-                        label = { Text("Branch / Area") },
-                        placeholder = { Text("e.g. BKK1, Phnom Penh") },
-                        singleLine = true,
-                        modifier = Modifier.fillMaxWidth()
-                    )
+                    val context = LocalContext.current
+                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        OutlinedTextField(
+                            value = address,
+                            onValueChange = { address = it },
+                            label = { Text("Delivery Address / Area (ទីតាំង)") },
+                            placeholder = { Text("e.g. BKK1, Phnom Penh, Cambodia") },
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth(),
+                            trailingIcon = {
+                                IconButton(
+                                    onClick = {
+                                        val query = Uri.encode(if (address.isNotBlank()) (if (address.contains("Cambodia", true)) address else "$address, Cambodia") else "Phnom Penh, Cambodia")
+                                        try {
+                                            val mapIntent = Intent(Intent.ACTION_VIEW, Uri.parse("https://maps.google.com/?q=$query"))
+                                            context.startActivity(mapIntent)
+                                        } catch (e: Exception) {
+                                            Toast.makeText(context, "Could not open map", Toast.LENGTH_SHORT).show()
+                                        }
+                                    }
+                                ) {
+                                    Icon(Icons.Filled.Place, contentDescription = "View on Google Maps (Cambodia)", tint = BrandGreen)
+                                }
+                            }
+                        )
+                        // Quick Cambodia Area Chips
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            listOf("BKK1", "Toul Kork", "Daun Penh", "Chamkarmon", "Sen Sok").forEach { area ->
+                                Surface(
+                                    shape = RoundedCornerShape(12.dp),
+                                    color = if (address.contains(area, true)) BrandGreen.copy(alpha = 0.15f) else RetailSlate100,
+                                    border = BorderStroke(1.dp, if (address.contains(area, true)) BrandGreen else RetailSlate300),
+                                    modifier = Modifier.clickable {
+                                        address = "$area, Phnom Penh, Cambodia"
+                                    }
+                                ) {
+                                    Text(
+                                        text = area,
+                                        fontSize = 10.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = if (address.contains(area, true)) BrandGreen else RetailSlate700,
+                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                                    )
+                                }
+                            }
+                        }
+                    }
                 }
 
                 item {
@@ -1221,7 +1263,21 @@ fun ClientDetailsDialog(
 
                 if (client.address.isNotBlank()) {
                     item {
-                        DetailRow(icon = Icons.Filled.Place, label = "Branch/Area", value = client.address)
+                        val context = LocalContext.current
+                        DetailRow(
+                            icon = Icons.Filled.Place,
+                            label = "Delivery / Area (ទីតាំង)",
+                            value = client.address,
+                            onCopy = {
+                                val query = Uri.encode(if (client.address.contains("Cambodia", true)) client.address else "${client.address}, Cambodia")
+                                try {
+                                    val mapIntent = Intent(Intent.ACTION_VIEW, Uri.parse("https://maps.google.com/?q=$query"))
+                                    context.startActivity(mapIntent)
+                                } catch (e: Exception) {
+                                    Toast.makeText(context, "Copied: ${client.address}", Toast.LENGTH_SHORT).show()
+                                }
+                            }
+                        )
                     }
                 }
 

@@ -8,7 +8,8 @@ import java.security.MessageDigest
 enum class ActivityCategory(val displayName: String, val code: String) {
     POS_TRANSACTION("POS Transactions", "POS_TRANSACTION"),
     INVENTORY_MODIFICATION("Inventory Modifications", "INVENTORY_MODIFICATION"),
-    STAFF_SECURITY("Staff & Security", "STAFF_SECURITY");
+    STAFF_SECURITY("Staff & Security", "STAFF_SECURITY"),
+    SALES_AUDIT("Sales & Custom Reports", "SALES_AUDIT");
 
     companion object {
         fun fromCode(code: String): ActivityCategory {

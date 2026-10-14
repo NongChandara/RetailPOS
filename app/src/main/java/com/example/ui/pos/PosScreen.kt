@@ -55,6 +55,9 @@ import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.Storefront
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material.icons.filled.ViewList
+import androidx.compose.material.icons.filled.Visibility
+import androidx.compose.material.icons.filled.VisibilityOff
+import com.example.ui.components.RunningAdvertisementBanner
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -117,6 +120,8 @@ import kotlinx.coroutines.launch
 import com.example.ui.components.BranchReceiptAndTaxDialog
 import com.example.ui.components.EditTaxPercentDialog
 import com.example.ui.components.StockBadge
+import com.example.ui.components.ThermalPrinterSettingsDialog
+import com.example.ui.components.ThermalReceiptPreviewDialog
 import com.example.ui.components.formatCurrency
 import com.example.ui.components.formatDateTime
 import com.example.ui.scanner.BarcodeScannerBottomSheet
@@ -157,6 +162,7 @@ fun PosScreen(
     val allBranches by viewModel.allBranches.collectAsState()
     val bakongAccountId by viewModel.bakongAccountId.collectAsState()
     val bakongMerchantName by viewModel.bakongMerchantName.collectAsState()
+    val hideFreeItemsForClients by viewModel.hideFreeItemsForClients.collectAsState()
 
     var posViewMode by rememberSaveable { mutableStateOf(PosViewMode.GRID) }
     var showCartSheet by remember { mutableStateOf(false) }
@@ -164,6 +170,8 @@ fun PosScreen(
     var showBarcodeScanner by remember { mutableStateOf(false) }
     var showBranchReceiptDialog by remember { mutableStateOf(false) }
     var showEditTaxDialog by remember { mutableStateOf(false) }
+    var showThermalPrinterDialog by remember { mutableStateOf(false) }
+    val activeThermalPreviewDoc by viewModel.activeThermalPreviewDoc.collectAsState()
     val coroutineScope = rememberCoroutineScope()
     val allClients by viewModel.allClients.collectAsState()
 
@@ -235,126 +243,106 @@ fun PosScreen(
                     Spacer(modifier = Modifier.width(4.dp))
                     Text("Scan", fontWeight = FontWeight.Bold, fontSize = 13.sp)
                 }
+
+                Spacer(modifier = Modifier.width(8.dp))
+
+                IconButton(
+                    onClick = { showThermalPrinterDialog = true },
+                    modifier = Modifier
+                        .height(56.dp)
+                        .width(48.dp)
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(RetailSlate100)
+                        .testTag("pos_thermal_printer_btn")
+                ) {
+                    Icon(
+                        Icons.Filled.Print,
+                        contentDescription = "Thermal Printer Setup",
+                        tint = RetailTealPrimary,
+                        modifier = Modifier.size(22.dp)
+                    )
+                }
             }
 
-            // Active Branch & Tax Configuration Banner
-            Surface(
-                color = RetailSlate100,
-                shape = RoundedCornerShape(10.dp),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 2.dp)
-                    .clickable { showBranchReceiptDialog = true }
-                    .testTag("pos_branch_tax_bar")
-            ) {
-                Row(
+            // Active Branch & Tax Configuration Banner (Hidden for Main Branch)
+            val currentBranch = activeBranch
+            val isMainBranch = currentBranch == null || currentBranch.isMain || currentBranch.name.contains("Main", ignoreCase = true)
+            if (!isMainBranch && currentBranch != null) {
+                Surface(
+                    color = RetailSlate100,
+                    shape = RoundedCornerShape(10.dp),
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 12.dp, vertical = 6.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
+                        .padding(horizontal = 16.dp, vertical = 2.dp)
+                        .clickable { showBranchReceiptDialog = true }
+                        .testTag("pos_branch_tax_bar")
                 ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(
-                            Icons.Filled.Storefront,
-                            contentDescription = null,
-                            tint = RetailTealPrimary,
-                            modifier = Modifier.size(16.dp)
-                        )
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text(
-                            text = activeBranch?.name ?: "Main Branch",
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = RetailSlate900
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        val currentTaxPct = String.format(Locale.US, "%.1f", taxRate * 100).removeSuffix(".0")
-                        Surface(
-                            color = Color(0xFFDCFCE7),
-                            shape = RoundedCornerShape(4.dp)
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 12.dp, vertical = 6.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                Icons.Filled.Storefront,
+                                contentDescription = null,
+                                tint = RetailTealPrimary,
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = currentBranch.name,
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = RetailSlate900
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            val currentTaxPct = String.format(Locale.US, "%.1f", taxRate * 100).removeSuffix(".0")
+                            Surface(
+                                color = Color(0xFFDCFCE7),
+                                shape = RoundedCornerShape(4.dp)
+                            ) {
+                                Text(
+                                    text = "Tax: $currentTaxPct%",
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color(0xFF166534),
+                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 1.dp)
+                                )
+                            }
+                        }
+
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.clickable { showBranchReceiptDialog = true }
                         ) {
                             Text(
-                                text = "Tax: $currentTaxPct%",
+                                text = "Receipt & Tax",
                                 fontSize = 11.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = Color(0xFF166534),
-                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 1.dp)
+                                fontWeight = FontWeight.SemiBold,
+                                color = RetailTealPrimary
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Icon(
+                                Icons.Filled.Tune,
+                                contentDescription = null,
+                                tint = RetailTealPrimary,
+                                modifier = Modifier.size(14.dp)
                             )
                         }
-                    }
-
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.clickable { showBranchReceiptDialog = true }
-                    ) {
-                        Text(
-                            text = "Receipt & Tax",
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            color = RetailTealPrimary
-                        )
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Icon(
-                            Icons.Filled.Tune,
-                            contentDescription = null,
-                            tint = RetailTealPrimary,
-                            modifier = Modifier.size(14.dp)
-                        )
                     }
                 }
             }
 
-            // Quick Promotion Action: Buy 10 Get 1 Free Example
-            Surface(
-                color = Color(0xFFFFFBEB),
-                shape = RoundedCornerShape(10.dp),
-                border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFFDE68A)),
+            // Running Promotional / Service Advertisement Banner
+            RunningAdvertisementBanner(
+                viewModel = viewModel,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 2.dp)
-                    .clickable { 
-                        viewModel.applyBuy10Get1Example()
-                        showCartSheet = true
-                    }
-                    .testTag("pos_buy10_get1_example_btn")
-            ) {
-                Row(
-                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text("🎁", fontSize = 14.sp)
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Column {
-                            Text(
-                                text = "Free Items for Clients (ទំនិញថែមជូនភ្ញៀវ)",
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 12.sp,
-                                color = Color(0xFF92400E)
-                            )
-                            Text(
-                                text = "Type any free quantity for client or try B10G1 example",
-                                fontSize = 10.sp,
-                                color = Color(0xFFB45309)
-                            )
-                        }
-                    }
-                    Surface(
-                        color = Color(0xFFD97706),
-                        shape = RoundedCornerShape(6.dp)
-                    ) {
-                        Text(
-                            text = "Try Example",
-                            fontWeight = FontWeight.ExtraBold,
-                            fontSize = 11.sp,
-                            color = Color.White,
-                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
-                        )
-                    }
-                }
-            }
+                    .padding(horizontal = 16.dp, vertical = 4.dp)
+            )
 
             // Category Chips Row with View Mode Switcher (List / Grid)
             Row(
@@ -645,6 +633,8 @@ fun PosScreen(
                 taxRate = taxRate,
                 taxAmount = taxAmount,
                 grandTotal = grandTotal,
+                hideFreeItemsForClients = hideFreeItemsForClients,
+                onToggleHideFreeItems = { viewModel.toggleHideFreeItemsForClients() },
                 onEditTaxClicked = { showEditTaxDialog = true },
                 onUpdateQty = { id, delta -> viewModel.updateCartQuantity(id, delta) },
                 onRemoveItem = { id -> viewModel.removeFromCart(id) },
@@ -680,6 +670,8 @@ fun PosScreen(
             clients = allClients,
             bakongAccountId = bakongAccountId,
             merchantName = bakongMerchantName,
+            hideFreeItemsForClients = hideFreeItemsForClients,
+            onToggleHideFreeItems = { viewModel.toggleHideFreeItemsForClients() },
             onUpdateQty = { id, delta -> viewModel.updateCartQuantity(id, delta) },
             onRemoveItem = { id -> viewModel.removeFromCart(id) },
             onUpdateItemDiscount = { id, pct -> viewModel.updateItemDiscount(id, pct) },
@@ -711,7 +703,35 @@ fun PosScreen(
             khrRate = khrRate,
             branch = saleBranch,
             onEditReceiptConfig = { showBranchReceiptDialog = true },
+            onPrintThermalReceipt = {
+                viewModel.printThermalCustomerReceipt(sale, items, forcePreview = false)
+            },
+            onPrintKitchenOrder = {
+                viewModel.printThermalOrderTicket(sale, items, forcePreview = false)
+            },
+            onPreviewThermalSlip = {
+                viewModel.printThermalCustomerReceipt(sale, items, forcePreview = true)
+            },
             onDismiss = { viewModel.dismissReceipt() }
+        )
+    }
+
+    // Thermal Printer Configuration Dialog
+    if (showThermalPrinterDialog) {
+        ThermalPrinterSettingsDialog(
+            onDismiss = { showThermalPrinterDialog = false }
+        )
+    }
+
+    // Thermal Receipt / Ticket / Z-Report On-Screen Simulator Dialog
+    activeThermalPreviewDoc?.let { doc ->
+        ThermalReceiptPreviewDialog(
+            doc = doc,
+            onDismiss = { viewModel.dismissThermalPreview() },
+            onOpenSettings = {
+                viewModel.dismissThermalPreview()
+                showThermalPrinterDialog = true
+            }
         )
     }
 
@@ -1428,6 +1448,8 @@ fun CartSheetContent(
     taxRate: Double = 0.08,
     taxAmount: Double,
     grandTotal: Double,
+    hideFreeItemsForClients: Boolean = false,
+    onToggleHideFreeItems: (() -> Unit)? = null,
     onEditTaxClicked: (() -> Unit)? = null,
     onUpdateQty: (Long, Int) -> Unit,
     onRemoveItem: (Long) -> Unit,
@@ -1525,6 +1547,41 @@ fun CartSheetContent(
 
         HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
 
+        // Free Items Client Visibility Toggle Chip
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(bottom = 6.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Surface(
+                color = if (hideFreeItemsForClients) Color(0xFFFEF2F2) else Color(0xFFF0FDF4),
+                shape = RoundedCornerShape(8.dp),
+                border = androidx.compose.foundation.BorderStroke(1.dp, if (hideFreeItemsForClients) Color(0xFFFCA5A5) else Color(0xFF86EFAC)),
+                modifier = Modifier
+                    .clickable { onToggleHideFreeItems?.invoke() }
+                    .testTag("toggle_hide_free_items_btn")
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        if (hideFreeItemsForClients) Icons.Default.VisibilityOff else Icons.Default.Visibility,
+                        contentDescription = null,
+                        tint = if (hideFreeItemsForClients) Color(0xFFDC2626) else Color(0xFF16A34A),
+                        modifier = Modifier.size(13.dp)
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text(
+                        text = if (hideFreeItemsForClients) "Client View: Free Items Hidden" else "Client View: Free Items Visible",
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = if (hideFreeItemsForClients) Color(0xFFB91C1C) else Color(0xFF166534)
+                    )
+                }
+            }
+        }
+
         // Cart items list with item-level controls
         LazyColumn(
             modifier = Modifier
@@ -1542,7 +1599,7 @@ fun CartSheetContent(
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     // Promo banner for Free Items
-                    if (item.freeItemsCount > 0) {
+                    if (item.freeItemsCount > 0 && !hideFreeItemsForClients) {
                         Surface(
                             color = Color(0xFFDCFCE7),
                             shape = RoundedCornerShape(6.dp),
@@ -1569,7 +1626,7 @@ fun CartSheetContent(
                                 )
                             }
                         }
-                    } else if (item.quantity >= 10 && item.freeItemsCount == 0) {
+                    } else if (item.quantity >= 10 && item.freeItemsCount == 0 && !hideFreeItemsForClients) {
                         Surface(
                             color = Color(0xFFFEF3C7),
                             shape = RoundedCornerShape(6.dp),
@@ -1909,6 +1966,8 @@ fun CheckoutDialog(
     clients: List<ClientEntity> = emptyList(),
     bakongAccountId: String = "trstore@aclb",
     merchantName: String = "TR STORE & CAFE",
+    hideFreeItemsForClients: Boolean = false,
+    onToggleHideFreeItems: (() -> Unit)? = null,
     onUpdateQty: (Long, Int) -> Unit,
     onRemoveItem: (Long) -> Unit,
     onUpdateItemDiscount: (Long, Double) -> Unit,
@@ -2681,7 +2740,7 @@ fun CheckoutDialog(
                                     verticalArrangement = Arrangement.spacedBy(6.dp)
                                 ) {
                                     // Promo banner for Free Items to Client
-                                    if (item.freeItemsCount > 0) {
+                                    if (item.freeItemsCount > 0 && !hideFreeItemsForClients) {
                                         Surface(
                                             color = Color(0xFFDCFCE7),
                                             shape = RoundedCornerShape(6.dp),
@@ -2708,7 +2767,7 @@ fun CheckoutDialog(
                                                 )
                                             }
                                         }
-                                    } else if (item.quantity >= 10 && item.freeItemsCount == 0) {
+                                    } else if (item.quantity >= 10 && item.freeItemsCount == 0 && !hideFreeItemsForClients) {
                                         Surface(
                                             color = Color(0xFFFEF3C7),
                                             shape = RoundedCornerShape(6.dp),
@@ -2995,7 +3054,7 @@ fun CheckoutDialog(
                                 val b10g1TotalFree = cart.sumOf { it.freeItemsCount }
                                 if (b10g1TotalSavings > 0) {
                                     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                                        Text("🎁 Free Items to Client ($b10g1TotalFree free unit)", fontSize = 12.sp, color = Color(0xFF15803D), fontWeight = FontWeight.Bold)
+                                        Text(if (hideFreeItemsForClients) "Promotion Savings" else "🎁 Free Items to Client ($b10g1TotalFree free unit)", fontSize = 12.sp, color = Color(0xFF15803D), fontWeight = FontWeight.Bold)
                                         Text("-${formatCurrency(b10g1TotalSavings)}", fontSize = 12.sp, color = Color(0xFF15803D), fontWeight = FontWeight.Bold)
                                     }
                                 }
@@ -3314,6 +3373,9 @@ fun ReceiptDialog(
     khrRate: Double = CurrencyUtils.activeKhrExchangeRate,
     branch: BranchEntity? = null,
     onEditReceiptConfig: (() -> Unit)? = null,
+    onPrintThermalReceipt: (() -> Unit)? = null,
+    onPrintKitchenOrder: (() -> Unit)? = null,
+    onPreviewThermalSlip: (() -> Unit)? = null,
     onDismiss: () -> Unit
 ) {
     Dialog(
@@ -3326,6 +3388,9 @@ fun ReceiptDialog(
             khrRate = khrRate,
             branch = branch,
             onEditReceipt = onEditReceiptConfig,
+            onPrintThermalReceipt = onPrintThermalReceipt,
+            onPrintKitchenOrder = onPrintKitchenOrder,
+            onPreviewThermalSlip = onPreviewThermalSlip,
             onDismiss = onDismiss
         )
     }

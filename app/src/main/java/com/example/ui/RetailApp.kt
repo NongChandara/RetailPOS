@@ -3,6 +3,7 @@ package com.example.ui
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -12,14 +13,18 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ExitToApp
+import androidx.compose.material.icons.filled.Android
 import androidx.compose.material.icons.filled.CurrencyExchange
 import androidx.compose.material.icons.filled.NotificationsActive
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Inventory2
+import androidx.compose.material.icons.filled.LockReset
 import androidx.compose.material.icons.filled.People
 import androidx.compose.material.icons.filled.PersonPin
 import androidx.compose.material.icons.filled.PointOfSale
@@ -63,19 +68,23 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.R
 import com.example.ui.clients.ClientsScreen
+import com.example.ui.components.ChangePasswordDialog
 import com.example.ui.components.CurrencySettingsDialog
 import com.example.ui.components.LowStockAlertSettingsDialog
 import com.example.ui.components.MenuQrCodeDialog
 import com.example.ui.components.SecureActivityLogView
 import com.example.ui.components.TelegramSettingsDialog
+import com.example.ui.components.ThermalPrinterSettingsDialog
 import com.example.ui.pos.PosScreen
 import com.example.ui.sales.SalesHistoryScreen
 import com.example.ui.stock.StockScreen
 import com.example.util.CurrencyMode
+import androidx.compose.material.icons.filled.Print
 import com.example.ui.theme.RetailSlate100
 import com.example.ui.theme.RetailSlate300
 import com.example.ui.theme.RetailSlate500
 import com.example.ui.theme.RetailSlate700
+import com.example.ui.theme.RetailSlate800
 import com.example.ui.theme.RetailSlate900
 import com.example.ui.theme.RetailStatusAmber
 import com.example.ui.theme.RetailStatusAmberContainer
@@ -89,7 +98,7 @@ enum class RetailTab(
     val testTag: String
 ) {
     POS("POS", Icons.Filled.PointOfSale, "tab_pos"),
-    STOCK("Stock", Icons.Filled.Inventory2, "tab_stock"),
+    STOCK("Product Menu", Icons.Filled.Inventory2, "tab_stock"),
     SALES("Sales", Icons.Filled.ReceiptLong, "tab_sales"),
     CLIENTS("Clients", Icons.Filled.PersonPin, "tab_clients"),
     USERS("Staff", Icons.Filled.People, "tab_users")
@@ -117,7 +126,25 @@ fun RetailApp(
     var showBakongSettingsDialog by remember { mutableStateOf(false) }
     var showTelegramDialog by remember { mutableStateOf(false) }
     var showLogoutDialog by remember { mutableStateOf(false) }
+    var showChangePasswordDialog by remember { mutableStateOf(false) }
+    var showApkInfoDialog by remember { mutableStateOf(false) }
+    var showThermalPrinterDialog by remember { mutableStateOf(false) }
     val isCurrentUserAdmin = currentUser?.role?.equals("ADMIN", ignoreCase = true) == true
+
+    // Cashiers only have access to POS and Product Menu tabs
+    val visibleTabs = remember(isCurrentUserAdmin) {
+        if (isCurrentUserAdmin) {
+            RetailTab.values().toList()
+        } else {
+            listOf(RetailTab.POS, RetailTab.STOCK)
+        }
+    }
+
+    LaunchedEffect(isCurrentUserAdmin) {
+        if (!isCurrentUserAdmin && currentTab != RetailTab.POS && currentTab != RetailTab.STOCK) {
+            currentTab = RetailTab.POS
+        }
+    }
 
     LaunchedEffect(toastMessage) {
         toastMessage?.let {
@@ -327,35 +354,125 @@ fun RetailApp(
                                 )
                             }
                         }
+                    }
 
-                        // Log Out Action Button for Admin
-                        Surface(
-                            color = Color(0xFFFEE2E2),
-                            shape = RoundedCornerShape(12.dp),
-                            border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFFCA5A5)),
-                            modifier = Modifier
-                                .clickable { showLogoutDialog = true }
-                                .padding(end = 6.dp)
-                                .testTag("top_bar_logout_btn")
+                    // Thermal Printer Configuration Pill
+                    Surface(
+                        color = Color(0xFFF1F5F9),
+                        shape = RoundedCornerShape(12.dp),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFCBD5E1)),
+                        modifier = Modifier
+                            .clickable { showThermalPrinterDialog = true }
+                            .padding(end = 6.dp)
+                            .testTag("top_bar_thermal_printer_pill")
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 5.dp),
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Row(
-                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 5.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Icon(
-                                    Icons.AutoMirrored.Filled.ExitToApp,
-                                    contentDescription = "Log Out",
-                                    tint = Color(0xFFDC2626),
-                                    modifier = Modifier.size(12.dp)
-                                )
-                                Spacer(modifier = Modifier.width(3.dp))
-                                Text(
-                                    text = "Log Out",
-                                    color = Color(0xFFDC2626),
-                                    fontSize = 11.sp,
-                                    fontWeight = FontWeight.Bold
-                                )
-                            }
+                            Icon(
+                                Icons.Filled.Print,
+                                contentDescription = "Thermal Printer",
+                                tint = RetailTealPrimary,
+                                modifier = Modifier.size(13.dp)
+                            )
+                            Spacer(modifier = Modifier.width(3.dp))
+                            Text(
+                                text = "Printer",
+                                color = RetailSlate800,
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
+
+                    // Change Password Action Button (Available to ALL users including Cashier)
+                    Surface(
+                        color = Color(0xFFCCFBF1),
+                        shape = RoundedCornerShape(12.dp),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF99F6E4)),
+                        modifier = Modifier
+                            .clickable { showChangePasswordDialog = true }
+                            .padding(end = 6.dp)
+                            .testTag("top_bar_change_password_btn")
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 5.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                Icons.Filled.LockReset,
+                                contentDescription = "Change Password",
+                                tint = RetailTealPrimary,
+                                modifier = Modifier.size(13.dp)
+                            )
+                            Spacer(modifier = Modifier.width(3.dp))
+                            Text(
+                                text = "Password",
+                                color = RetailTealPrimary,
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
+
+                    // APK File / Download Info Action Button
+                    Surface(
+                        color = Color(0xFFFEF3C7),
+                        shape = RoundedCornerShape(12.dp),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFFDE68A)),
+                        modifier = Modifier
+                            .clickable { showApkInfoDialog = true }
+                            .padding(end = 6.dp)
+                            .testTag("top_bar_apk_info_btn")
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 5.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                Icons.Filled.Android,
+                                contentDescription = "APK File",
+                                tint = Color(0xFFD97706),
+                                modifier = Modifier.size(13.dp)
+                            )
+                            Spacer(modifier = Modifier.width(3.dp))
+                            Text(
+                                text = "APK File",
+                                color = Color(0xFFB45309),
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
+
+                    // Log Out Action Button
+                    Surface(
+                        color = Color(0xFFFEE2E2),
+                        shape = RoundedCornerShape(12.dp),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFFCA5A5)),
+                        modifier = Modifier
+                            .clickable { showLogoutDialog = true }
+                            .padding(end = 6.dp)
+                            .testTag("top_bar_logout_btn")
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 5.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                Icons.AutoMirrored.Filled.ExitToApp,
+                                contentDescription = "Log Out",
+                                tint = Color(0xFFDC2626),
+                                modifier = Modifier.size(12.dp)
+                            )
+                            Spacer(modifier = Modifier.width(3.dp))
+                            Text(
+                                text = "Log Out",
+                                color = Color(0xFFDC2626),
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold
+                            )
                         }
                     }
 
@@ -364,7 +481,13 @@ fun RetailApp(
                         color = RetailSlate100,
                         shape = RoundedCornerShape(14.dp),
                         modifier = Modifier
-                            .clickable { currentTab = RetailTab.USERS }
+                            .clickable {
+                                if (isCurrentUserAdmin) {
+                                    currentTab = RetailTab.USERS
+                                } else {
+                                    showChangePasswordDialog = true
+                                }
+                            }
                             .padding(end = 8.dp)
                     ) {
                         Row(
@@ -403,7 +526,7 @@ fun RetailApp(
                 containerColor = Color.White,
                 tonalElevation = 8.dp
             ) {
-                RetailTab.values().forEach { tab ->
+                visibleTabs.forEach { tab ->
                     val isSelected = currentTab == tab
                     NavigationBarItem(
                         selected = isSelected,
@@ -545,6 +668,105 @@ fun RetailApp(
                         Text("Cancel")
                     }
                 }
+            )
+        }
+
+        if (showChangePasswordDialog) {
+            currentUser?.let { user ->
+                ChangePasswordDialog(
+                    user = user,
+                    onDismiss = { showChangePasswordDialog = false },
+                    onSubmitNewPassword = { oldPin, newPin, onComplete ->
+                        viewModel.changeUserPassword(user.id, oldPin, newPin) { success, msg ->
+                            onComplete(success, msg)
+                            if (success) {
+                                showChangePasswordDialog = false
+                            }
+                        }
+                    }
+                )
+            }
+        }
+
+        if (showApkInfoDialog) {
+            androidx.compose.material3.AlertDialog(
+                onDismissRequest = { showApkInfoDialog = false },
+                icon = {
+                    Icon(
+                        Icons.Filled.Android,
+                        contentDescription = null,
+                        tint = Color(0xFF16A34A),
+                        modifier = Modifier.size(32.dp)
+                    )
+                },
+                title = {
+                    Text("Android APK File & Web Emulator Guide", fontWeight = FontWeight.Bold, fontSize = 17.sp)
+                },
+                text = {
+                    Column(
+                        verticalArrangement = Arrangement.spacedBy(10.dp),
+                        modifier = Modifier.verticalScroll(rememberScrollState())
+                    ) {
+                        Text(
+                            "📦 Built APK File Location:",
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 13.sp,
+                            color = RetailSlate900
+                        )
+                        Surface(
+                            color = RetailSlate100,
+                            shape = RoundedCornerShape(8.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Column(modifier = Modifier.padding(10.dp)) {
+                                Text("• TR_Coffee_POS.apk (47 MB)", fontWeight = FontWeight.Bold, fontSize = 12.sp, color = Color(0xFF15803D))
+                                Text("• Path: Root directory /TR_Coffee_POS.apk", fontSize = 11.sp, color = RetailSlate700)
+                                Text("• Debug: /app/build/outputs/apk/debug/app-debug.apk", fontSize = 11.sp, color = RetailSlate500)
+                            }
+                        }
+
+                        Text(
+                            "🌐 Running on Web Browser:",
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 13.sp,
+                            color = RetailSlate900
+                        )
+                        Text(
+                            "You are currently running the app in the Google AI Studio Web Streaming Emulator! All features (POS, running ads with web images, KHQR payment, receipts, inventory, and sales) work live directly in your browser without needing to download or install the APK.",
+                            fontSize = 12.sp,
+                            color = RetailSlate700,
+                            lineHeight = 16.sp
+                        )
+
+                        Text(
+                            "📥 How to Download APK:",
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 13.sp,
+                            color = RetailSlate900
+                        )
+                        Text(
+                            "1. Look at the File Explorer tree on the left sidebar in AI Studio.\n2. Right-click on 'TR_Coffee_POS.apk' and select 'Download'.\n3. Alternatively, click AI Studio's top settings menu (⋮) -> Export -> Download APK.",
+                            fontSize = 11.sp,
+                            color = RetailSlate700,
+                            lineHeight = 16.sp
+                        )
+                    }
+                },
+                confirmButton = {
+                    androidx.compose.material3.Button(
+                        onClick = { showApkInfoDialog = false },
+                        colors = androidx.compose.material3.ButtonDefaults.buttonColors(containerColor = RetailTealPrimary)
+                    ) {
+                        Text("Understood")
+                    }
+                }
+            )
+        }
+
+        // Thermal Printer Setup Modal Dialog
+        if (showThermalPrinterDialog) {
+            ThermalPrinterSettingsDialog(
+                onDismiss = { showThermalPrinterDialog = false }
             )
         }
     }

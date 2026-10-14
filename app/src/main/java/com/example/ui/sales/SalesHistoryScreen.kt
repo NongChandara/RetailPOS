@@ -434,6 +434,15 @@ fun SalesHistoryScreen(
         ReceiptDialog(
             sale = sale,
             items = items,
+            onPrintThermalReceipt = {
+                viewModel.printThermalCustomerReceipt(sale, items, forcePreview = false)
+            },
+            onPrintKitchenOrder = {
+                viewModel.printThermalOrderTicket(sale, items, forcePreview = false)
+            },
+            onPreviewThermalSlip = {
+                viewModel.printThermalCustomerReceipt(sale, items, forcePreview = true)
+            },
             onDismiss = { viewModel.dismissReceipt() }
         )
     }
